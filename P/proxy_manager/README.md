@@ -19,6 +19,23 @@ bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager/
 | VLESS Reality | Xray 核心协议 |
 | Hysteria2 | 基于 QUIC 的高速协议 |
 
+## 🌐 多服务器管理 (Agent 模式)
+
+从一台 VPS 集中管理多台服务器的代理服务。
+
+### 安装 Agent (在目标 VPS 运行)
+
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager/agent/install-agent.sh)
+```
+
+### 功能
+
+- 🔍 批量查看所有服务器状态
+- 🔄 批量重启服务
+- 🗑️ 批量卸载服务
+- 🔐 Token 认证（无需存储 SSH 密码）
+
 ## 🔧 常用命令
 
 ```bash
@@ -42,12 +59,17 @@ proxy-manager update       # 更新到最新版
 │   ├── config.sh
 │   ├── system.sh
 │   └── validation.sh
-└── modules/               # 服务模块
-    ├── snell.sh
-    ├── singbox.sh
-    ├── reality.sh
-    ├── hysteria2.sh
-    └── cert.sh
+├── modules/               # 服务模块
+│   ├── snell.sh
+│   ├── singbox.sh
+│   ├── reality.sh
+│   ├── hysteria2.sh
+│   ├── cert.sh
+│   └── multi-server.sh
+└── agent/                 # 探针 Agent
+    ├── agent.py
+    ├── install-agent.sh
+    └── requirements.txt
 ```
 
 ## 📄 License
