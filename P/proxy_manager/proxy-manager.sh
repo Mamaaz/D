@@ -38,7 +38,6 @@ source "${MODULE_DIR}/singbox.sh"
 source "${MODULE_DIR}/reality.sh"
 source "${MODULE_DIR}/cert.sh"
 source "${MODULE_DIR}/hysteria2.sh"
-source "${MODULE_DIR}/multi-server.sh"
 
 # =========================================
 # 版本信息
@@ -115,12 +114,9 @@ show_menu() {
     echo -e "${GREEN}│${RESET}    ${CYAN}9.${RESET} 续签 Hysteria2 证书                                  ${GREEN}│${RESET}"
     echo -e "${GREEN}│${RESET}    ${CYAN}10.${RESET} 查看证书状态                                        ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
-    echo -e "${GREEN}│${RESET}  ${YELLOW}多服务器管理${RESET}                                                 ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}11.${RESET} 多服务器管理                                        ${GREEN}│${RESET}"
-    echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}  ${YELLOW}系统管理${RESET}                                                 ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}12.${RESET} 更新 Proxy Manager                                  ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}13.${RESET} 完全卸载 Proxy Manager                              ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}11.${RESET} 更新 Proxy Manager                                  ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}12.${RESET} 完全卸载 Proxy Manager                              ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}    ${CYAN}0.${RESET} 退出                                                 ${GREEN}│${RESET}"
     echo -e "${GREEN}└─────────────────────────────────────────────────────────────┘${RESET}"
@@ -300,7 +296,7 @@ main() {
         show_status
         show_menu
         
-        read -p "请选择 [0-13]: " choice
+        read -p "请选择 [0-12]: " choice
         
         case $choice in
             1) install_snell; clear_status_cache; read -p "按回车键继续..." ;;
@@ -313,9 +309,8 @@ main() {
             8) show_uninstall_submenu ;;
             9) renew_hysteria2_cert; read -p "按回车键继续..." ;;
             10) view_cert_status; read -p "按回车键继续..." ;;
-            11) show_multi_server_menu ;;
-            12) update_proxy_manager ;;
-            13) uninstall_proxy_manager ;;
+            11) update_proxy_manager ;;
+            12) uninstall_proxy_manager ;;
             0) cleanup ;;
             *) echo -e "${RED}无效选择${RESET}"; sleep 1 ;;
         esac
