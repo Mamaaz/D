@@ -73,10 +73,10 @@ log_message() {
             echo -e "${RED}[ERROR] $message${RESET}" >&2
             ;;
         WARN)
-            echo -e "${YELLOW}[WARN] $message${RESET}"
+            echo -e "${YELLOW}[WARN] $message${RESET}" >&2
             ;;
         SUCCESS)
-            echo -e "${GREEN}[SUCCESS] $message${RESET}"
+            echo -e "${GREEN}[SUCCESS] $message${RESET}" >&2
             ;;
         INFO)
             # INFO 级别不输出到终端，只记录日志
