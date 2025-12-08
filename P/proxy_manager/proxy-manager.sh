@@ -42,7 +42,7 @@ source "${MODULE_DIR}/hysteria2.sh"
 # =========================================
 # 版本信息
 # =========================================
-SCRIPT_VERSION="3.1"
+SCRIPT_VERSION="3.2"
 
 # =========================================
 # 信号处理
@@ -185,9 +185,9 @@ show_update_submenu() {
     
     case $choice in
         1) update_snell ;;
-        2) echo -e "${YELLOW}Sing-box 更新功能开发中...${RESET}" ;;
-        3) echo -e "${YELLOW}Reality 更新功能开发中...${RESET}" ;;
-        4) echo -e "${YELLOW}Hysteria2 更新功能开发中...${RESET}" ;;
+        2) update_singbox ;;
+        3) update_reality ;;
+        4) update_hysteria2 ;;
         0) return ;;
         *) echo -e "${RED}无效选择${RESET}" ;;
     esac
@@ -286,10 +286,50 @@ uninstall_proxy_manager() {
 }
 
 # =========================================
+# 帮助信息
+# =========================================
+show_help() {
+    echo -e "${CYAN}Proxy Manager v${SCRIPT_VERSION}${RESET}"
+    echo ""
+    echo -e "多协议代理服务器一键管理脚本"
+    echo ""
+    echo -e "${YELLOW}用法:${RESET}"
+    echo -e "  proxy-manager              运行交互式管理界面"
+    echo -e "  proxy-manager --help       显示此帮助信息"
+    echo -e "  proxy-manager update       更新 Proxy Manager"
+    echo ""
+    echo -e "${YELLOW}支持的协议:${RESET}"
+    echo -e "  - Snell + Shadow-TLS"
+    echo -e "  - SS-2022 + Shadow-TLS (Sing-box)"
+    echo -e "  - VLESS Reality"
+    echo -e "  - Hysteria2"
+    echo ""
+    echo -e "${YELLOW}文档:${RESET}"
+    echo -e "  https://github.com/Mamaaz/D"
+    echo ""
+}
+
+# =========================================
 # 主循环
 # =========================================
 main() {
+    # 处理命令行参数
+    case "${1:-}" in
+        --help|-h|help)
+            show_help
+            exit 0
+            ;;
+        update)
+            check_root
+            update_proxy_manager
+            exit 0
+            ;;
+    esac
+    
     check_root
+    
+    # 启动时检查版本更新
+    check_version_updates
     
     while true; do
         show_header
