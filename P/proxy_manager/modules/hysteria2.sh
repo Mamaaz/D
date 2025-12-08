@@ -149,6 +149,9 @@ EOF
     systemctl enable hysteria2
     systemctl start hysteria2
     
+    # 验证服务启动
+    verify_service_started "hysteria2" || log_message "WARN" "Hysteria2 服务启动异常"
+    
     # 保存配置
     if [ "$ENABLE_OBFS" = true ]; then
         cat <<EOF > /etc/hysteria2-proxy-config.txt
@@ -176,6 +179,9 @@ CERT_TYPE=letsencrypt
 ENABLE_OBFS=false
 EOF
     fi
+    
+    # 设置配置文件权限
+    secure_config_file "/etc/hysteria2-proxy-config.txt"
     
     # 生成分享链接
     if [ "$ENABLE_OBFS" = true ]; then
@@ -262,4 +268,75 @@ view_hysteria2_config() {
     echo -e "${CYAN}分享链接:${RESET}"
     echo -e "${GREEN}${link}${RESET}"
     echo ""
+}
+
+# =========================================
+# 更新 Hysteria2 (sing-box 核心)
+# =========================================
+update_hysteria2() {
+    if ! check_hysteria2_installed; then
+        echo -e "${RED}Hysteria2 未安装${RESET}"
+        return
+    fi
+    
+    echo -e "${GREEN}正在检查 Hysteria2 (sing-box) 更新...${RESET}"
+    
+    detect_architecture
+    
+    local current_version=""
+    if [ -f /etc/hysteria2-proxy-config.txt ]; then
+        current_version=$(grep "^SINGBOX_VERSION=" /etc/hysteria2-proxy-config.txt 2>/dev/null | cut -d'=' -f2)
+    fi
+    local latest_version=$(get_latest_version "" "sing-box" "$DEFAULT_SINGBOX_VERSION")
+    
+    echo -e "${CYAN}当前版本: ${YELLOW}${current_version:-未知}${RESET}"
+    echo -e "${CYAN}最新版本: ${YELLOW}${latest_version}${RESET}"
+    
+    if [ "$current_version" == "$latest_version" ]; then
+        echo -e "${GREEN}已是最新版本${RESET}"
+        return
+    fi
+    
+    read -p "确认更新？(y/n): " confirm
+    [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && return
+    
+    # 停止服务
+    systemctl stop hysteria2 2>/dev/null
+    
+    # 备份旧版本
+    cp /usr/local/bin/sing-box /usr/local/bin/sing-box.bak 2>/dev/null
+    
+    # 下载新版本
+    local url="https://github.com/SagerNet/sing-box/releases/download/${latest_version}/sing-box-${latest_version#v}-linux-${SINGBOX_ARCH}.tar.gz"
+    local temp_file=$(create_temp_file ".tar.gz")
+    
+    if download_file "$url" "$temp_file" 3 5; then
+        cd /tmp || { rm -f "$temp_file"; return 1; }
+        tar -xzf "$temp_file" || { rm -f "$temp_file"; return 1; }
+        rm -f "$temp_file"
+        
+        local dir=$(find /tmp -type d -name "sing-box-*-linux-${SINGBOX_ARCH}" | head -n 1)
+        if [ -n "$dir" ]; then
+            mv "$dir/sing-box" /usr/local/bin/
+            chmod +x /usr/local/bin/sing-box
+            rm -rf "$dir"
+        fi
+        
+        rm -rf /tmp/sing-box* 2>/dev/null || true
+        
+        # 更新配置文件中的版本
+        sed -i "s/SINGBOX_VERSION=.*/SINGBOX_VERSION=$latest_version/" /etc/hysteria2-proxy-config.txt 2>/dev/null
+        
+        systemctl start hysteria2
+        verify_service_started "hysteria2"
+        
+        echo -e "${GREEN}✓ 更新成功！${RESET}"
+    else
+        # 回滚
+        mv /usr/local/bin/sing-box.bak /usr/local/bin/sing-box 2>/dev/null
+        systemctl start hysteria2
+        echo -e "${RED}更新失败，已回滚${RESET}"
+    fi
+    
+    rm -f /usr/local/bin/sing-box.bak 2>/dev/null
 }
