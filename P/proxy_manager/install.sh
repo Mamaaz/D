@@ -73,9 +73,16 @@ install_proxy_manager() {
     done
     
     # 下载 modules 目录
-    for f in snell.sh singbox.sh reality.sh hysteria2.sh cert.sh; do
+    for f in snell.sh singbox.sh reality.sh hysteria2.sh cert.sh multi-server.sh; do
         curl -sL "${RAW_URL}/modules/${f}" -o "$INSTALL_DIR/modules/${f}"
     done
+    
+    # 下载 agent 目录
+    mkdir -p "$INSTALL_DIR/agent"
+    for f in agent.py install-agent.sh requirements.txt; do
+        curl -sL "${RAW_URL}/agent/${f}" -o "$INSTALL_DIR/agent/${f}"
+    done
+    chmod +x "$INSTALL_DIR/agent/install-agent.sh"
     
     # 设置权限
     chmod +x "$INSTALL_DIR/proxy-manager.sh"
