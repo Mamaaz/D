@@ -171,13 +171,15 @@ def install_service():
     if domain:
         env['INSTALL_DOMAIN'] = domain
     
+    sni = data.get('sni', 'www.microsoft.com')
+    
     # Run installation script
     if service_type == 'snell':
-        result = install_snell(env, port)
+        result = install_snell(env, port, sni)
     elif service_type == 'singbox':
-        result = install_singbox(env, port)
+        result = install_singbox(env, port, sni)
     elif service_type == 'reality':
-        result = install_reality(env, port)
+        result = install_reality(env, port, sni)
     elif service_type == 'hysteria2':
         result = install_hysteria2(env, port, domain)
     else:
@@ -185,9 +187,10 @@ def install_service():
     
     return result
 
-def install_snell(env, port=None):
+def install_snell(env, port=None, sni='www.microsoft.com'):
     """Install Snell + Shadow-TLS"""
     port = port or 8443
+    sni = sni or 'www.microsoft.com'
     snell_port = 12580
     
     # Download and install Snell
@@ -262,7 +265,7 @@ After=network.target snell.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/shadow-tls --fastopen --v3 server --listen 0.0.0.0:{port} --server 127.0.0.1:{snell_port} --tls www.microsoft.com:443 --password {stls_password}
+ExecStart=/usr/local/bin/shadow-tls --fastopen --v3 server --listen 0.0.0.0:{port} --server 127.0.0.1:{snell_port} --tls {sni}:443 --password {stls_password}
 Restart=always
 RestartSec=3
 
@@ -301,9 +304,10 @@ SNELL_VERSION={snell_version}
         }
     })
 
-def install_singbox(env, port=None):
+def install_singbox(env, port=None, sni='www.microsoft.com'):
     """Install Sing-box SS-2022"""
     port = port or 8443
+    sni = sni or 'www.microsoft.com'
     ss_port = 12581
     
     # Download sing-box
@@ -402,9 +406,10 @@ SINGBOX_VERSION={version}
         }
     })
 
-def install_reality(env, port=None):
+def install_reality(env, port=None, sni='www.microsoft.com'):
     """Install VLESS Reality with auto-generated keys"""
     port = port or 443
+    sni = sni or 'www.microsoft.com'
     
     # Download sing-box if not exists
     arch = run_command('uname -m')['stdout']
@@ -461,11 +466,11 @@ def install_reality(env, port=None):
             "users": [{"uuid": uuid, "flow": "xtls-rprx-vision"}],
             "tls": {
                 "enabled": True,
-                "server_name": "www.microsoft.com",
+                "server_name": sni,
                 "reality": {
                     "enabled": True,
                     "handshake": {
-                        "server": "www.microsoft.com",
+                        "server": sni,
                         "server_port": 443
                     },
                     "private_key": priv_key,
@@ -504,7 +509,7 @@ REALITY_PORT={port}
 REALITY_UUID={uuid}
 REALITY_PUBLIC_KEY={pub_key}
 REALITY_SHORT_ID={short_id}
-REALITY_DEST=www.microsoft.com:443
+REALITY_DEST={sni}:443
 SINGBOX_VERSION={version}
 """
     with open('/etc/reality-proxy-config.txt', 'w') as f:
@@ -523,7 +528,7 @@ SINGBOX_VERSION={version}
             'uuid': uuid,
             'public_key': pub_key,
             'short_id': short_id,
-            'sni': 'www.microsoft.com'
+            'sni': sni
         }
     })
 
