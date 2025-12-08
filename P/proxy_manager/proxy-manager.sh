@@ -9,9 +9,16 @@ set -o pipefail
 set -u
 
 # =========================================
-# 脚本路径设置
+# 脚本路径设置（正确处理软链接）
 # =========================================
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 获取真实脚本路径，处理软链接情况
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"
 MODULE_DIR="${SCRIPT_DIR}/modules"
 
