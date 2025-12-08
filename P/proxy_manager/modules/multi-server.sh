@@ -367,7 +367,7 @@ batch_uninstall() {
     done
 }
 
-# 查看单个服务器详情
+# 查看单个服务器详情并管理
 view_server_details() {
     list_servers
     
@@ -382,40 +382,362 @@ view_server_details() {
         return 1
     fi
     
-    echo -e "${CYAN}正在获取详情...${RESET}"
+    # 进入单服务器管理子菜单
+    manage_single_server "$server_id"
+}
+
+# 单服务器管理菜单
+manage_single_server() {
+    local server_id=$1
+    local server_name=$(jq -r ".servers[] | select(.id == \"$server_id\") | .name" "$SERVERS_FILE")
     
-    local result=$(call_agent_api "$server_id" "/api/status")
+    while true; do
+        echo ""
+        echo -e "${CYAN}正在获取 ${server_name} 详情...${RESET}"
+        
+        local result=$(call_agent_api "$server_id" "/api/status")
+        
+        if ! echo "$result" | jq -e '.ip' &>/dev/null; then
+            echo -e "${RED}无法连接到服务器${RESET}"
+            read -p "按回车键返回..."
+            return 1
+        fi
+        
+        echo ""
+        echo -e "${GREEN}=========================================${RESET}"
+        echo -e "${GREEN}   ${server_name} 服务器管理${RESET}"
+        echo -e "${GREEN}=========================================${RESET}"
+        echo ""
+        echo -e "${CYAN}IP: ${YELLOW}$(echo "$result" | jq -r '.ip')${RESET}"
+        echo -e "${CYAN}主机名: ${YELLOW}$(echo "$result" | jq -r '.hostname')${RESET}"
+        echo ""
+        echo -e "${CYAN}服务状态:${RESET}"
+        
+        local installed_services=()
+        for svc in snell singbox reality hysteria2; do
+            local status=$(echo "$result" | jq -r ".services.${svc}.status // \"none\"")
+            local installed=$(echo "$result" | jq -r ".services.${svc}.installed // false")
+            
+            if [ "$installed" == "true" ]; then
+                installed_services+=("$svc")
+                if [ "$status" == "active" ]; then
+                    echo -e "  ${svc}: ${GREEN}运行中${RESET}"
+                else
+                    echo -e "  ${svc}: ${RED}已停止${RESET}"
+                fi
+            else
+                echo -e "  ${svc}: ${YELLOW}未安装${RESET}"
+            fi
+        done
+        
+        echo ""
+        echo -e "${YELLOW}操作:${RESET}"
+        echo -e "  ${CYAN}1.${RESET} 安装服务"
+        echo -e "  ${CYAN}2.${RESET} 重启服务"
+        echo -e "  ${CYAN}3.${RESET} 卸载服务"
+        echo -e "  ${CYAN}4.${RESET} 查看服务配置"
+        echo -e "  ${CYAN}5.${RESET} 查看服务日志"
+        echo -e "  ${CYAN}0.${RESET} 返回"
+        echo ""
+        
+        read -p "请选择 [0-5]: " choice
+        
+        case $choice in
+            1) remote_install_service "$server_id" "$server_name" ;;
+            2) remote_restart_service "$server_id" "$server_name" ;;
+            3) remote_uninstall_service "$server_id" "$server_name" ;;
+            4) remote_view_config "$server_id" "$server_name" ;;
+            5) remote_view_logs "$server_id" "$server_name" ;;
+            0) return ;;
+            *) echo -e "${RED}无效选择${RESET}" ;;
+        esac
+    done
+}
+
+# 远程安装服务
+remote_install_service() {
+    local server_id=$1
+    local server_name=$2
     
-    if ! echo "$result" | jq -e '.ip' &>/dev/null; then
-        echo -e "${RED}无法连接到服务器${RESET}"
-        return 1
+    local server_info=$(jq -r ".servers[] | select(.id == \"$server_id\")" "$SERVERS_FILE")
+    local host=$(echo "$server_info" | jq -r '.host')
+    
+    echo ""
+    echo -e "${GREEN}=========================================${RESET}"
+    echo -e "${GREEN}   在 ${server_name} 安装代理服务${RESET}"
+    echo -e "${GREEN}=========================================${RESET}"
+    echo ""
+    echo -e "${CYAN}选择要安装的服务:${RESET}"
+    echo -e "${YELLOW}1.${RESET} Snell + Shadow-TLS"
+    echo -e "${YELLOW}2.${RESET} Sing-box SS-2022"
+    echo -e "${YELLOW}3.${RESET} VLESS Reality"
+    echo -e "${YELLOW}4.${RESET} Hysteria2"
+    echo ""
+    
+    read -p "选择 [1-4]: " choice
+    
+    local service_type
+    local service_name
+    case $choice in
+        1) service_type="snell"; service_name="Snell + Shadow-TLS" ;;
+        2) service_type="singbox"; service_name="Sing-box SS-2022" ;;
+        3) service_type="reality"; service_name="VLESS Reality" ;;
+        4) service_type="hysteria2"; service_name="Hysteria2" ;;
+        *) echo -e "${RED}无效选择${RESET}"; return ;;
+    esac
+    
+    # 收集安装参数
+    local install_port=""
+    local install_domain=""
+    local json_data=""
+    
+    echo ""
+    
+    if [ "$service_type" == "snell" ] || [ "$service_type" == "singbox" ]; then
+        read -p "Shadow-TLS 端口 (默认: 8443): " install_port
+        install_port=${install_port:-8443}
+        json_data="{\"type\": \"$service_type\", \"port\": $install_port}"
+        
+    elif [ "$service_type" == "reality" ]; then
+        read -p "Reality 端口 (默认: 443): " install_port
+        install_port=${install_port:-443}
+        json_data="{\"type\": \"$service_type\", \"port\": $install_port}"
+        
+    elif [ "$service_type" == "hysteria2" ]; then
+        read -p "Hysteria2 端口 (默认: 443): " install_port
+        install_port=${install_port:-443}
+        echo ""
+        echo -e "${CYAN}Hysteria2 证书选项:${RESET}"
+        echo -e "${YELLOW}1.${RESET} 自签名证书 (无需域名，客户端需开启 insecure)"
+        echo -e "${YELLOW}2.${RESET} Let's Encrypt (需要域名指向此服务器)"
+        echo ""
+        read -p "选择 [1-2] (默认: 1): " cert_choice
+        
+        if [ "$cert_choice" == "2" ]; then
+            read -p "输入域名: " install_domain
+            if [ -z "$install_domain" ]; then
+                echo -e "${RED}域名不能为空，将使用自签名证书${RESET}"
+                json_data="{\"type\": \"$service_type\", \"port\": $install_port}"
+            else
+                json_data="{\"type\": \"$service_type\", \"port\": $install_port, \"domain\": \"$install_domain\"}"
+            fi
+        else
+            json_data="{\"type\": \"$service_type\", \"port\": $install_port}"
+        fi
     fi
     
     echo ""
-    echo -e "${GREEN}=========================================${RESET}"
-    echo -e "${GREEN}   服务器详情${RESET}"
-    echo -e "${GREEN}=========================================${RESET}"
+    echo -e "${CYAN}正在远程安装 ${service_name}...${RESET}"
+    echo -e "${YELLOW}这可能需要 1-3 分钟，请稍候...${RESET}"
     echo ""
-    echo -e "${CYAN}IP: ${YELLOW}$(echo "$result" | jq -r '.ip')${RESET}"
-    echo -e "${CYAN}主机名: ${YELLOW}$(echo "$result" | jq -r '.hostname')${RESET}"
-    echo ""
-    echo -e "${CYAN}服务状态:${RESET}"
     
-    for svc in snell singbox reality hysteria2; do
-        local status=$(echo "$result" | jq -r ".services.${svc}.status // \"none\"")
-        local installed=$(echo "$result" | jq -r ".services.${svc}.installed // false")
+    local result=$(call_agent_api "$server_id" "/api/install" "POST" "$json_data")
+    
+    if echo "$result" | jq -e '.status == "ok"' &>/dev/null; then
+        echo -e "${GREEN}✓ ${service_name} 安装成功！${RESET}"
+        echo ""
+        echo -e "${CYAN}配置信息:${RESET}"
+        echo -e "  IP: ${YELLOW}$(echo "$result" | jq -r '.config.ip')${RESET}"
+        echo -e "  端口: ${YELLOW}$(echo "$result" | jq -r '.config.port')${RESET}"
         
-        if [ "$installed" == "true" ]; then
-            if [ "$status" == "active" ]; then
-                echo -e "  ${svc}: ${GREEN}运行中${RESET}"
-            else
-                echo -e "  ${svc}: ${RED}已停止${RESET}"
+        if [ "$service_type" == "snell" ]; then
+            echo -e "  PSK: ${YELLOW}$(echo "$result" | jq -r '.config.psk')${RESET}"
+            echo -e "  Shadow-TLS 密码: ${YELLOW}$(echo "$result" | jq -r '.config.shadow_tls_password')${RESET}"
+        elif [ "$service_type" == "singbox" ]; then
+            echo -e "  SS 密码: ${YELLOW}$(echo "$result" | jq -r '.config.ss_password')${RESET}"
+            echo -e "  Shadow-TLS 密码: ${YELLOW}$(echo "$result" | jq -r '.config.shadow_tls_password')${RESET}"
+        elif [ "$service_type" == "reality" ]; then
+            echo -e "  UUID: ${YELLOW}$(echo "$result" | jq -r '.config.uuid')${RESET}"
+            echo -e "  公钥: ${YELLOW}$(echo "$result" | jq -r '.config.public_key')${RESET}"
+            echo -e "  Short ID: ${YELLOW}$(echo "$result" | jq -r '.config.short_id')${RESET}"
+            echo -e "  SNI: ${YELLOW}$(echo "$result" | jq -r '.config.sni')${RESET}"
+        elif [ "$service_type" == "hysteria2" ]; then
+            echo -e "  密码: ${YELLOW}$(echo "$result" | jq -r '.config.password')${RESET}"
+            echo -e "  SNI: ${YELLOW}$(echo "$result" | jq -r '.config.sni')${RESET}"
+            local insecure=$(echo "$result" | jq -r '.config.insecure')
+            if [ "$insecure" == "true" ]; then
+                echo -e "  ${YELLOW}注意: 使用自签名证书，客户端需开启 insecure${RESET}"
             fi
-        else
-            echo -e "  ${svc}: ${YELLOW}未安装${RESET}"
         fi
-    done
+    else
+        local error=$(echo "$result" | jq -r '.error // "未知错误"')
+        echo -e "${RED}✗ 安装失败: ${error}${RESET}"
+        
+        local hint=$(echo "$result" | jq -r '.hint // ""')
+        [ -n "$hint" ] && echo -e "${YELLOW}提示: ${hint}${RESET}"
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# 远程重启服务
+remote_restart_service() {
+    local server_id=$1
+    local server_name=$2
+    
     echo ""
+    echo -e "${CYAN}选择要重启的服务:${RESET}"
+    echo -e "${YELLOW}1.${RESET} snell"
+    echo -e "${YELLOW}2.${RESET} singbox"
+    echo -e "${YELLOW}3.${RESET} reality"
+    echo -e "${YELLOW}4.${RESET} hysteria2"
+    echo -e "${YELLOW}5.${RESET} 全部"
+    echo ""
+    
+    read -p "选择 [1-5]: " choice
+    
+    local service_type
+    case $choice in
+        1) service_type="snell" ;;
+        2) service_type="singbox" ;;
+        3) service_type="reality" ;;
+        4) service_type="hysteria2" ;;
+        5) service_type="all" ;;
+        *) echo -e "${RED}无效选择${RESET}"; return ;;
+    esac
+    
+    echo -e "${CYAN}正在重启 ${server_name} 的 ${service_type}...${RESET}"
+    
+    local result=$(call_agent_api "$server_id" "/api/restart" "POST" "{\"type\": \"$service_type\"}")
+    
+    if echo "$result" | jq -e '.status == "ok"' &>/dev/null; then
+        echo -e "${GREEN}✓ 重启成功${RESET}"
+    else
+        local error=$(echo "$result" | jq -r '.error // .message // "unknown error"')
+        echo -e "${RED}✗ 重启失败: ${error}${RESET}"
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# 远程卸载服务
+remote_uninstall_service() {
+    local server_id=$1
+    local server_name=$2
+    
+    echo ""
+    echo -e "${CYAN}选择要卸载的服务:${RESET}"
+    echo -e "${YELLOW}1.${RESET} snell"
+    echo -e "${YELLOW}2.${RESET} singbox"
+    echo -e "${YELLOW}3.${RESET} reality"
+    echo -e "${YELLOW}4.${RESET} hysteria2"
+    echo ""
+    
+    read -p "选择 [1-4]: " choice
+    
+    local service_type
+    case $choice in
+        1) service_type="snell" ;;
+        2) service_type="singbox" ;;
+        3) service_type="reality" ;;
+        4) service_type="hysteria2" ;;
+        *) echo -e "${RED}无效选择${RESET}"; return ;;
+    esac
+    
+    read -p "确认卸载 ${server_name} 的 ${service_type}？(y/n): " confirm
+    [ "$confirm" != "y" ] && return
+    
+    echo -e "${CYAN}正在卸载...${RESET}"
+    
+    local result=$(call_agent_api "$server_id" "/api/uninstall" "POST" "{\"type\": \"$service_type\"}")
+    
+    if echo "$result" | jq -e '.status == "ok"' &>/dev/null; then
+        echo -e "${GREEN}✓ 卸载成功${RESET}"
+    else
+        local error=$(echo "$result" | jq -r '.error // "unknown error"')
+        echo -e "${RED}✗ 卸载失败: ${error}${RESET}"
+    fi
+    
+    read -p "按回车键继续..."
+}
+
+# 远程查看配置
+remote_view_config() {
+    local server_id=$1
+    local server_name=$2
+    
+    echo ""
+    echo -e "${CYAN}选择要查看的服务配置:${RESET}"
+    echo -e "${YELLOW}1.${RESET} snell"
+    echo -e "${YELLOW}2.${RESET} singbox"
+    echo -e "${YELLOW}3.${RESET} reality"
+    echo -e "${YELLOW}4.${RESET} hysteria2"
+    echo ""
+    
+    read -p "选择 [1-4]: " choice
+    
+    local service_type
+    case $choice in
+        1) service_type="snell" ;;
+        2) service_type="singbox" ;;
+        3) service_type="reality" ;;
+        4) service_type="hysteria2" ;;
+        *) echo -e "${RED}无效选择${RESET}"; return ;;
+    esac
+    
+    echo -e "${CYAN}正在获取配置...${RESET}"
+    
+    local result=$(call_agent_api "$server_id" "/api/config/${service_type}")
+    
+    if echo "$result" | jq -e '.config' &>/dev/null; then
+        echo ""
+        echo -e "${GREEN}=========================================${RESET}"
+        echo -e "${GREEN}   ${server_name} - ${service_type} 配置${RESET}"
+        echo -e "${GREEN}=========================================${RESET}"
+        echo ""
+        echo "$result" | jq -r '.config | to_entries[] | "\(.key): \(.value)"' | while read line; do
+            echo -e "${CYAN}${line}${RESET}"
+        done
+    else
+        local error=$(echo "$result" | jq -r '.error // "无法获取配置"')
+        echo -e "${RED}${error}${RESET}"
+    fi
+    echo ""
+    
+    read -p "按回车键继续..."
+}
+
+# 远程查看日志
+remote_view_logs() {
+    local server_id=$1
+    local server_name=$2
+    
+    echo ""
+    echo -e "${CYAN}选择要查看的服务日志:${RESET}"
+    echo -e "${YELLOW}1.${RESET} snell"
+    echo -e "${YELLOW}2.${RESET} singbox"
+    echo -e "${YELLOW}3.${RESET} reality"
+    echo -e "${YELLOW}4.${RESET} hysteria2"
+    echo ""
+    
+    read -p "选择 [1-4]: " choice
+    
+    local service_type
+    case $choice in
+        1) service_type="snell" ;;
+        2) service_type="singbox" ;;
+        3) service_type="reality" ;;
+        4) service_type="hysteria2" ;;
+        *) echo -e "${RED}无效选择${RESET}"; return ;;
+    esac
+    
+    echo -e "${CYAN}正在获取日志...${RESET}"
+    
+    local result=$(call_agent_api "$server_id" "/api/logs/${service_type}")
+    
+    if echo "$result" | jq -e '.logs' &>/dev/null; then
+        echo ""
+        echo -e "${GREEN}=========================================${RESET}"
+        echo -e "${GREEN}   ${server_name} - ${service_type} 日志${RESET}"
+        echo -e "${GREEN}=========================================${RESET}"
+        echo ""
+        echo "$result" | jq -r '.logs[]' | tail -30
+    else
+        echo -e "${RED}无法获取日志${RESET}"
+    fi
+    echo ""
+    
+    read -p "按回车键继续..."
 }
 
 # =========================================
