@@ -118,8 +118,68 @@ EOF
     
     sleep 2
     
-    # Get server IP
-    SERVER_IP=$(curl -s --connect-timeout 2 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
+    # Get all IPs
+    echo ""
+    echo -e "${CYAN}检测服务器 IP 地址...${RESET}"
+    
+    local ipv4_list=()
+    local ipv6_list=()
+    
+    # Get IPv4 addresses
+    while IFS= read -r ip; do
+        [ -n "$ip" ] && ipv4_list+=("$ip")
+    done < <(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+    
+    # Get IPv6 addresses
+    while IFS= read -r ip; do
+        [ -n "$ip" ] && ipv6_list+=("$ip")
+    done < <(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9a-fA-F:]+$' | grep ':')
+    
+    # Try to get public IP
+    local public_ip=$(curl -s -4 --connect-timeout 2 ifconfig.me 2>/dev/null)
+    
+    local all_ips=()
+    [ -n "$public_ip" ] && all_ips+=("$public_ip (公网 IPv4)")
+    for ip in "${ipv4_list[@]}"; do
+        [[ "$ip" != "$public_ip" ]] && all_ips+=("$ip (IPv4)")
+    done
+    for ip in "${ipv6_list[@]}"; do
+        all_ips+=("$ip (IPv6)")
+    done
+    
+    if [ ${#all_ips[@]} -eq 0 ]; then
+        SERVER_IP="127.0.0.1"
+        echo -e "${RED}未检测到 IP 地址，使用 127.0.0.1${RESET}"
+    elif [ ${#all_ips[@]} -eq 1 ]; then
+        SERVER_IP=$(echo "${all_ips[0]}" | awk '{print $1}')
+        echo -e "${GREEN}检测到 IP: ${SERVER_IP}${RESET}"
+    else
+        echo ""
+        echo -e "${CYAN}检测到多个 IP 地址，请选择:${RESET}"
+        for i in "${!all_ips[@]}"; do
+            echo -e "  ${YELLOW}$((i+1)).${RESET} ${all_ips[$i]}"
+        done
+        echo ""
+        
+        while true; do
+            read -p "请选择 [1-${#all_ips[@]}] (默认: 1): " ip_choice
+            ip_choice=${ip_choice:-1}
+            
+            if [[ "$ip_choice" =~ ^[0-9]+$ ]] && [ "$ip_choice" -ge 1 ] && [ "$ip_choice" -le ${#all_ips[@]} ]; then
+                SERVER_IP=$(echo "${all_ips[$((ip_choice-1))]}" | awk '{print $1}')
+                break
+            else
+                echo -e "${RED}无效选择${RESET}"
+            fi
+        done
+    fi
+    
+    # Check if IPv6 and format accordingly
+    if echo "$SERVER_IP" | grep -q ':'; then
+        IP_FOR_URL="[${SERVER_IP}]"
+    else
+        IP_FOR_URL="${SERVER_IP}"
+    fi
     
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${RESET}"
@@ -133,7 +193,7 @@ EOF
     echo -e "${GREEN}在控制节点添加此服务器时，请使用以上信息${RESET}"
     echo ""
     echo -e "${CYAN}测试命令:${RESET}"
-    echo -e "${YELLOW}curl -H 'Authorization: Bearer ${AGENT_TOKEN}' http://${SERVER_IP}:${AGENT_PORT}/api/status${RESET}"
+    echo -e "${YELLOW}curl -H 'Authorization: Bearer ${AGENT_TOKEN}' http://${IP_FOR_URL}:${AGENT_PORT}/api/status${RESET}"
     echo ""
 }
 
