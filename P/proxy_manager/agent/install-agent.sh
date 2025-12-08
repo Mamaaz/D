@@ -33,20 +33,19 @@ fi
 install_python() {
     echo -e "${CYAN}检查 Python3...${RESET}"
     
-    if ! command -v python3 &>/dev/null; then
-        echo -e "${YELLOW}正在安装 Python3...${RESET}"
-        
-        if command -v apt-get &>/dev/null; then
-            apt-get update -qq
-            apt-get install -y python3 python3-pip python3-venv
-        elif command -v yum &>/dev/null; then
-            yum install -y python3 python3-pip
-        elif command -v dnf &>/dev/null; then
-            dnf install -y python3 python3-pip
-        else
-            echo -e "${RED}无法安装 Python3，请手动安装${RESET}"
-            exit 1
-        fi
+    if command -v apt-get &>/dev/null; then
+        # Debian/Ubuntu - always ensure venv is installed
+        apt-get update -qq
+        apt-get install -y python3 python3-pip python3-venv
+    elif command -v yum &>/dev/null; then
+        yum install -y python3 python3-pip
+    elif command -v dnf &>/dev/null; then
+        dnf install -y python3 python3-pip
+    elif command -v pacman &>/dev/null; then
+        pacman -Sy --noconfirm python python-pip
+    else
+        echo -e "${RED}无法安装 Python3，请手动安装${RESET}"
+        exit 1
     fi
     
     echo -e "${GREEN}✓ Python3 已安装${RESET}"
