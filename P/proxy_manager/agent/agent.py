@@ -143,40 +143,511 @@ def get_config(service_type):
 @app.route('/api/install', methods=['POST'])
 @require_auth
 def install_service():
-    """Install a proxy service"""
+    """Install a proxy service with parameters"""
     data = request.json or {}
     service_type = data.get('type')
     
     if not service_type:
         return jsonify({'error': 'type is required'}), 400
     
-    # Map service type to install command
-    install_map = {
-        'snell': '1',
-        'singbox': '2',
-        'reality': '3',
-        'hysteria2': '4'
-    }
-    
-    if service_type not in install_map:
+    if service_type not in ['snell', 'singbox', 'reality', 'hysteria2']:
         return jsonify({'error': f'unknown service: {service_type}'}), 400
     
-    # Build environment for non-interactive install
+    # Check if already installed
+    if service_type in SERVICES and os.path.exists(SERVICES[service_type]['config']):
+        return jsonify({'error': f'{service_type} is already installed'}), 400
+    
+    # Build environment for installation
     env = os.environ.copy()
     env['AUTO_INSTALL'] = '1'
+    env['DEBIAN_FRONTEND'] = 'noninteractive'
     
     # Pass parameters
-    if 'port' in data:
-        env['INSTALL_PORT'] = str(data['port'])
-    if 'domain' in data:
-        env['INSTALL_DOMAIN'] = data['domain']
+    port = data.get('port')
+    if port:
+        env['INSTALL_PORT'] = str(port)
     
-    # TODO: Implement non-interactive install support in proxy-manager.sh
-    # For now, return not implemented
+    domain = data.get('domain')
+    if domain:
+        env['INSTALL_DOMAIN'] = domain
+    
+    # Run installation script
+    if service_type == 'snell':
+        result = install_snell(env, port)
+    elif service_type == 'singbox':
+        result = install_singbox(env, port)
+    elif service_type == 'reality':
+        result = install_reality(env, port)
+    elif service_type == 'hysteria2':
+        result = install_hysteria2(env, port, domain)
+    else:
+        return jsonify({'error': 'not implemented'}), 501
+    
+    return result
+
+def install_snell(env, port=None):
+    """Install Snell + Shadow-TLS"""
+    port = port or 8443
+    snell_port = 12580
+    
+    # Download and install Snell
+    arch = run_command('uname -m')['stdout']
+    if 'x86_64' in arch:
+        arch_suffix = 'amd64'
+    elif 'aarch64' in arch or 'arm64' in arch:
+        arch_suffix = 'aarch64'
+    else:
+        arch_suffix = 'armv7l'
+    
+    # Get latest snell version
+    snell_version = run_command("curl -s https://manual.nssurge.com/others/snell.html | grep -oP 'snell-server-v\\K[0-9.]+' | head -1")['stdout'] or '4.1.1'
+    
+    cmds = [
+        'mkdir -p /etc/snell',
+        f'cd /tmp && curl -sLO https://dl.nssurge.com/snell/snell-server-v{snell_version}-linux-{arch_suffix}.zip',
+        f'cd /tmp && unzip -o snell-server-v{snell_version}-linux-{arch_suffix}.zip',
+        'mv /tmp/snell-server /usr/local/bin/',
+        'chmod +x /usr/local/bin/snell-server',
+    ]
+    
+    for cmd in cmds:
+        r = run_command(cmd, timeout=120)
+        if r['returncode'] != 0 and 'already exists' not in r['stderr']:
+            pass  # Continue anyway
+    
+    # Generate PSK
+    psk = run_command("openssl rand -base64 16")['stdout']
+    
+    # Create Snell config
+    snell_config = f"""[snell-server]
+listen = 127.0.0.1:{snell_port}
+psk = {psk}
+ipv6 = false
+"""
+    with open('/etc/snell/snell.conf', 'w') as f:
+        f.write(snell_config)
+    
+    # Create systemd service
+    service = f"""[Unit]
+Description=Snell Proxy Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/snell-server -c /etc/snell/snell.conf
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+    with open('/lib/systemd/system/snell.service', 'w') as f:
+        f.write(service)
+    
+    # Download and install Shadow-TLS
+    stls_version = run_command("curl -s https://api.github.com/repos/ihciah/shadow-tls/releases/latest | grep -oP '\"tag_name\": \"v\\K[0-9.]+' | head -1")['stdout'] or '0.2.25'
+    stls_arch = 'x86_64' if 'amd64' in arch_suffix else arch_suffix
+    
+    run_command(f'cd /tmp && curl -sLO https://github.com/ihciah/shadow-tls/releases/download/v{stls_version}/shadow-tls-{stls_arch}-unknown-linux-musl')
+    run_command(f'mv /tmp/shadow-tls-{stls_arch}-unknown-linux-musl /usr/local/bin/shadow-tls')
+    run_command('chmod +x /usr/local/bin/shadow-tls')
+    
+    # Generate Shadow-TLS password
+    stls_password = run_command("openssl rand -base64 16")['stdout']
+    
+    # Create Shadow-TLS service
+    stls_service = f"""[Unit]
+Description=Shadow-TLS for Snell
+After=network.target snell.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/shadow-tls --fastopen --v3 server --listen 0.0.0.0:{port} --server 127.0.0.1:{snell_port} --tls www.microsoft.com:443 --password {stls_password}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+    with open('/etc/systemd/system/shadow-tls-snell.service', 'w') as f:
+        f.write(stls_service)
+    
+    # Save config
+    server_ip = get_server_ip()
+    config_content = f"""SERVER_IP={server_ip}
+TYPE=Snell
+SNELL_PORT={snell_port}
+SHADOW_TLS_PORT={port}
+SNELL_PSK={psk}
+SHADOW_TLS_PASSWORD={stls_password}
+SNELL_VERSION={snell_version}
+"""
+    with open('/etc/snell-proxy-config.txt', 'w') as f:
+        f.write(config_content)
+    
+    # Start services
+    run_command('systemctl daemon-reload')
+    run_command('systemctl enable snell shadow-tls-snell')
+    run_command('systemctl start snell shadow-tls-snell')
+    
     return jsonify({
-        'error': 'Remote install requires interactive mode. Please SSH to install.',
-        'hint': f'Run: proxy-manager, then select option {install_map[service_type]}'
-    }), 501
+        'status': 'ok',
+        'message': 'Snell + Shadow-TLS installed',
+        'config': {
+            'ip': server_ip,
+            'port': port,
+            'psk': psk,
+            'shadow_tls_password': stls_password
+        }
+    })
+
+def install_singbox(env, port=None):
+    """Install Sing-box SS-2022"""
+    port = port or 8443
+    ss_port = 12581
+    
+    # Download sing-box
+    arch = run_command('uname -m')['stdout']
+    if 'x86_64' in arch:
+        arch_suffix = 'amd64'
+    elif 'aarch64' in arch or 'arm64' in arch:
+        arch_suffix = 'arm64'
+    else:
+        arch_suffix = 'armv7'
+    
+    version = run_command("curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep -oP '\"tag_name\": \"v\\K[0-9.]+' | head -1")['stdout'] or '1.10.0'
+    
+    cmds = [
+        'mkdir -p /etc/sing-box',
+        f'cd /tmp && curl -sLO https://github.com/SagerNet/sing-box/releases/download/v{version}/sing-box-{version}-linux-{arch_suffix}.tar.gz',
+        f'cd /tmp && tar -xzf sing-box-{version}-linux-{arch_suffix}.tar.gz',
+        f'mv /tmp/sing-box-{version}-linux-{arch_suffix}/sing-box /usr/local/bin/',
+        'chmod +x /usr/local/bin/sing-box',
+    ]
+    
+    for cmd in cmds:
+        run_command(cmd, timeout=120)
+    
+    # Generate SS password
+    ss_password = run_command("openssl rand -base64 16")['stdout']
+    stls_password = run_command("openssl rand -base64 16")['stdout']
+    
+    # Create sing-box config
+    config = {
+        "inbounds": [{
+            "type": "shadowsocks",
+            "listen": "127.0.0.1",
+            "listen_port": ss_port,
+            "method": "2022-blake3-aes-128-gcm",
+            "password": ss_password,
+            "network": ["tcp", "udp"]
+        }],
+        "outbounds": [{"type": "direct"}]
+    }
+    
+    with open('/etc/sing-box/config.json', 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    # Create systemd service
+    service = """[Unit]
+Description=Sing-box Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+    with open('/lib/systemd/system/sing-box.service', 'w') as f:
+        f.write(service)
+    
+    # Shadow-TLS
+    stls_version = run_command("curl -s https://api.github.com/repos/ihciah/shadow-tls/releases/latest | grep -oP '\"tag_name\": \"v\\K[0-9.]+' | head -1")['stdout'] or '0.2.25'
+    stls_arch = 'x86_64' if 'amd64' in arch_suffix else arch_suffix.replace('arm64', 'aarch64')
+    
+    if not os.path.exists('/usr/local/bin/shadow-tls'):
+        run_command(f'cd /tmp && curl -sLO https://github.com/ihciah/shadow-tls/releases/download/v{stls_version}/shadow-tls-{stls_arch}-unknown-linux-musl')
+        run_command(f'mv /tmp/shadow-tls-{stls_arch}-unknown-linux-musl /usr/local/bin/shadow-tls')
+        run_command('chmod +x /usr/local/bin/shadow-tls')
+    
+    # Save config and start
+    server_ip = get_server_ip()
+    config_content = f"""SERVER_IP={server_ip}
+TYPE=Singbox
+SS_PORT={ss_port}
+SHADOW_TLS_PORT={port}
+SS_PASSWORD={ss_password}
+SHADOW_TLS_PASSWORD={stls_password}
+SINGBOX_VERSION={version}
+"""
+    with open('/etc/singbox-proxy-config.txt', 'w') as f:
+        f.write(config_content)
+    
+    run_command('systemctl daemon-reload')
+    run_command('systemctl enable sing-box')
+    run_command('systemctl start sing-box')
+    
+    return jsonify({
+        'status': 'ok',
+        'message': 'Sing-box SS-2022 installed',
+        'config': {
+            'ip': server_ip,
+            'port': port,
+            'ss_password': ss_password,
+            'shadow_tls_password': stls_password
+        }
+    })
+
+def install_reality(env, port=None):
+    """Install VLESS Reality with auto-generated keys"""
+    port = port or 443
+    
+    # Download sing-box if not exists
+    arch = run_command('uname -m')['stdout']
+    if 'x86_64' in arch:
+        arch_suffix = 'amd64'
+    elif 'aarch64' in arch or 'arm64' in arch:
+        arch_suffix = 'arm64'
+    else:
+        arch_suffix = 'armv7'
+    
+    version = run_command("curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep -oP '\"tag_name\": \"v\\K[0-9.]+' | head -1")['stdout'] or '1.10.0'
+    
+    if not os.path.exists('/usr/local/bin/sing-box'):
+        cmds = [
+            'mkdir -p /etc/sing-box-reality',
+            f'cd /tmp && curl -sLO https://github.com/SagerNet/sing-box/releases/download/v{version}/sing-box-{version}-linux-{arch_suffix}.tar.gz',
+            f'cd /tmp && tar -xzf sing-box-{version}-linux-{arch_suffix}.tar.gz',
+            f'mv /tmp/sing-box-{version}-linux-{arch_suffix}/sing-box /usr/local/bin/',
+            'chmod +x /usr/local/bin/sing-box',
+        ]
+        for cmd in cmds:
+            run_command(cmd, timeout=120)
+    else:
+        run_command('mkdir -p /etc/sing-box-reality')
+    
+    # Generate x25519 key pair using sing-box
+    key_result = run_command('/usr/local/bin/sing-box generate reality-keypair')
+    if key_result['returncode'] != 0:
+        # Fallback: use openssl
+        priv_key = run_command("openssl genpkey -algorithm x25519 | openssl pkey -text -noout | grep -A3 'priv:' | tail -3 | tr -d ' :\\n' | xxd -r -p | base64 | tr '/+' '_-' | tr -d '='")['stdout']
+        pub_key = run_command("openssl genpkey -algorithm x25519 | openssl pkey -pubout -outform DER | tail -c 32 | base64 | tr '/+' '_-' | tr -d '='")['stdout']
+    else:
+        # Parse sing-box output
+        lines = key_result['stdout'].strip().split('\n')
+        priv_key = pub_key = ''
+        for line in lines:
+            if 'PrivateKey:' in line:
+                priv_key = line.split(':')[1].strip()
+            elif 'PublicKey:' in line:
+                pub_key = line.split(':')[1].strip()
+    
+    # Generate UUID
+    uuid = run_command("cat /proc/sys/kernel/random/uuid")['stdout']
+    
+    # Generate short_id
+    short_id = run_command("openssl rand -hex 8")['stdout']
+    
+    # Reality config
+    config = {
+        "inbounds": [{
+            "type": "vless",
+            "listen": "::",
+            "listen_port": port,
+            "users": [{"uuid": uuid, "flow": "xtls-rprx-vision"}],
+            "tls": {
+                "enabled": True,
+                "server_name": "www.microsoft.com",
+                "reality": {
+                    "enabled": True,
+                    "handshake": {
+                        "server": "www.microsoft.com",
+                        "server_port": 443
+                    },
+                    "private_key": priv_key,
+                    "short_id": [short_id]
+                }
+            }
+        }],
+        "outbounds": [{"type": "direct"}]
+    }
+    
+    with open('/etc/sing-box-reality/config.json', 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    # Create systemd service
+    service = """[Unit]
+Description=Sing-box Reality Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box-reality/config.json
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+    with open('/lib/systemd/system/sing-box-reality.service', 'w') as f:
+        f.write(service)
+    
+    # Save config
+    server_ip = get_server_ip()
+    config_content = f"""SERVER_IP={server_ip}
+TYPE=Reality
+REALITY_PORT={port}
+REALITY_UUID={uuid}
+REALITY_PUBLIC_KEY={pub_key}
+REALITY_SHORT_ID={short_id}
+REALITY_DEST=www.microsoft.com:443
+SINGBOX_VERSION={version}
+"""
+    with open('/etc/reality-proxy-config.txt', 'w') as f:
+        f.write(config_content)
+    
+    run_command('systemctl daemon-reload')
+    run_command('systemctl enable sing-box-reality')
+    run_command('systemctl start sing-box-reality')
+    
+    return jsonify({
+        'status': 'ok',
+        'message': 'VLESS Reality installed',
+        'config': {
+            'ip': server_ip,
+            'port': port,
+            'uuid': uuid,
+            'public_key': pub_key,
+            'short_id': short_id,
+            'sni': 'www.microsoft.com'
+        }
+    })
+
+def install_hysteria2(env, port=None, domain=None):
+    """Install Hysteria2 with self-signed cert or domain"""
+    port = port or 443
+    
+    # Download hysteria
+    arch = run_command('uname -m')['stdout']
+    if 'x86_64' in arch:
+        arch_suffix = 'amd64'
+    elif 'aarch64' in arch or 'arm64' in arch:
+        arch_suffix = 'arm64'
+    else:
+        arch_suffix = 'armv7'
+    
+    version = run_command("curl -s https://api.github.com/repos/apernet/hysteria/releases/latest | grep -oP '\"tag_name\": \"app/v\\K[0-9.]+' | head -1")['stdout'] or '2.4.5'
+    
+    cmds = [
+        'mkdir -p /etc/hysteria2',
+        f'cd /tmp && curl -sLO https://github.com/apernet/hysteria/releases/download/app/v{version}/hysteria-linux-{arch_suffix}',
+        'mv /tmp/hysteria-linux-* /usr/local/bin/hysteria2',
+        'chmod +x /usr/local/bin/hysteria2',
+    ]
+    for cmd in cmds:
+        run_command(cmd, timeout=120)
+    
+    # Generate password
+    password = run_command("openssl rand -base64 16")['stdout']
+    
+    # Certificate handling
+    if domain:
+        # Try to use acme.sh for Let's Encrypt
+        acme_result = run_command(f'''
+            if [ ! -f ~/.acme.sh/acme.sh ]; then
+                curl -s https://get.acme.sh | sh -s email=admin@{domain}
+            fi
+            ~/.acme.sh/acme.sh --issue -d {domain} --standalone --httpport 80 --force 2>/dev/null
+            ~/.acme.sh/acme.sh --install-cert -d {domain} \
+                --key-file /etc/hysteria2/private.key \
+                --fullchain-file /etc/hysteria2/cert.pem
+        ''', timeout=180)
+        
+        if acme_result['returncode'] != 0:
+            # Fallback to self-signed
+            domain = None
+    
+    if not domain:
+        # Generate self-signed certificate
+        server_ip = get_server_ip()
+        run_command(f'''
+            openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
+                -keyout /etc/hysteria2/private.key \
+                -out /etc/hysteria2/cert.pem \
+                -subj "/CN={server_ip}" -days 3650
+        ''')
+        cert_domain = server_ip
+    else:
+        cert_domain = domain
+    
+    # Hysteria2 config
+    config = f"""listen: :{port}
+
+tls:
+  cert: /etc/hysteria2/cert.pem
+  key: /etc/hysteria2/private.key
+
+auth:
+  type: password
+  password: {password}
+
+masquerade:
+  type: proxy
+  proxy:
+    url: https://www.bing.com
+    rewriteHost: true
+"""
+    with open('/etc/hysteria2/config.yaml', 'w') as f:
+        f.write(config)
+    
+    # Create systemd service
+    service = """[Unit]
+Description=Hysteria2 Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hysteria2 server -c /etc/hysteria2/config.yaml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+"""
+    with open('/lib/systemd/system/hysteria2.service', 'w') as f:
+        f.write(service)
+    
+    # Save config
+    server_ip = get_server_ip()
+    config_content = f"""SERVER_IP={server_ip}
+TYPE=Hysteria2
+HYSTERIA2_PORT={port}
+HYSTERIA2_PASSWORD={password}
+HYSTERIA2_DOMAIN={cert_domain}
+HYSTERIA2_VERSION={version}
+"""
+    with open('/etc/hysteria2-proxy-config.txt', 'w') as f:
+        f.write(config_content)
+    
+    run_command('systemctl daemon-reload')
+    run_command('systemctl enable hysteria2')
+    run_command('systemctl start hysteria2')
+    
+    return jsonify({
+        'status': 'ok',
+        'message': 'Hysteria2 installed' + (' (self-signed cert)' if not domain else ''),
+        'config': {
+            'ip': server_ip,
+            'port': port,
+            'password': password,
+            'sni': cert_domain,
+            'insecure': not domain  # True if self-signed
+        }
+    })
 
 @app.route('/api/uninstall', methods=['POST'])
 @require_auth
