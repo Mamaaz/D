@@ -27,45 +27,8 @@ check_snell_installed() {
 }
 
 # =========================================
-# TLS 域名选择
+# 注意: select_tls_domain 函数已移至 lib/common.sh
 # =========================================
-select_tls_domain() {
-    echo ""
-    echo -e "${CYAN}=========================================${RESET}"
-    echo -e "${CYAN}   选择 Shadow-TLS SNI 伪装域名${RESET}"
-    echo -e "${CYAN}=========================================${RESET}"
-    echo ""
-    echo -e "${GREEN}推荐域名:${RESET}"
-    echo -e "${YELLOW}1.${RESET}  gateway.icloud.com ${GREEN}(推荐)${RESET}"
-    echo -e "${YELLOW}2.${RESET}  www.microsoft.com"
-    echo -e "${YELLOW}3.${RESET}  www.apple.com"
-    echo -e "${YELLOW}4.${RESET}  cloudflare.com"
-    echo -e "${YELLOW}5.${RESET}  www.amazon.com"
-    echo ""
-    echo -e "${YELLOW}0.${RESET}  自定义域名"
-    echo ""
-    
-    while true; do
-        read -p "请选择域名 [0-5] (默认: 1): " domain_choice
-        domain_choice=${domain_choice:-1}
-        
-        case $domain_choice in
-            1) TLS_DOMAIN="gateway.icloud.com"; break;;
-            2) TLS_DOMAIN="www.microsoft.com"; break;;
-            3) TLS_DOMAIN="www.apple.com"; break;;
-            4) TLS_DOMAIN="cloudflare.com"; break;;
-            5) TLS_DOMAIN="www.amazon.com"; break;;
-            0)
-                read -p "请输入自定义域名: " TLS_DOMAIN
-                [ -n "$TLS_DOMAIN" ] && break
-                echo -e "${RED}域名不能为空${RESET}"
-                ;;
-            *) echo -e "${RED}无效的选择${RESET}" ;;
-        esac
-    done
-    
-    echo -e "${GREEN}已选择域名: ${TLS_DOMAIN}${RESET}"
-}
 
 # =========================================
 # 下载 Shadow-TLS
@@ -75,7 +38,8 @@ download_shadow_tls() {
         log_message "INFO" "开始下载 Shadow-TLS..."
         echo -e "${GREEN}正在下载 Shadow-TLS...${RESET}"
         
-        SHADOW_TLS_VERSION=$(get_latest_version "ihciah/shadow-tls" "github" "$DEFAULT_SHADOW_TLS_VERSION")
+        # 使用正确的服务名获取版本
+        SHADOW_TLS_VERSION=$(get_latest_version "" "shadow-tls" "$DEFAULT_SHADOW_TLS_VERSION")
         
         echo -e "${GREEN}Shadow-TLS 版本: ${SHADOW_TLS_VERSION}${RESET}"
         
@@ -83,6 +47,7 @@ download_shadow_tls() {
         local temp_file=$(create_temp_file)
         
         if ! download_file "$url" "$temp_file" 3 5; then
+            rm -f "$temp_file" 2>/dev/null || true
             return 1
         fi
         
@@ -208,7 +173,9 @@ EOF
     systemctl start snell
     systemctl start shadow-tls-snell
     
-    sleep 2
+    # 验证服务启动
+    verify_service_started "snell" || log_message "WARN" "Snell 服务启动异常"
+    verify_service_started "shadow-tls-snell" || log_message "WARN" "Shadow-TLS 服务启动异常"
     
     # 保存配置
     cat <<EOF > /etc/snell-proxy-config.txt
@@ -223,6 +190,9 @@ SHADOW_TLS_PORT=$SNELL_SHADOW_TLS_PORT
 SHADOW_TLS_PASSWORD=$SNELL_SHADOW_TLS_PASSWORD
 TLS_DOMAIN=$SNELL_TLS_DOMAIN
 EOF
+    
+    # 设置配置文件权限
+    secure_config_file "/etc/snell-proxy-config.txt"
     
     log_message "SUCCESS" "Snell + Shadow-TLS 安装完成"
     
