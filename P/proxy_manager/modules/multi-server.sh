@@ -455,6 +455,20 @@ install_agent_local() {
         bash <(curl -sL "${AGENT_INSTALL_URL}")
     fi
 }
+# 卸载本机 Agent
+uninstall_agent_local() {
+    echo ""
+    read -p "确认卸载本机 Agent？(y/n): " confirm
+    [ "$confirm" != "y" ] && return
+    
+    echo -e "${CYAN}正在卸载本机 Agent...${RESET}"
+    
+    if [ -f "${SCRIPT_DIR}/agent/install-agent.sh" ]; then
+        bash "${SCRIPT_DIR}/agent/install-agent.sh" uninstall
+    else
+        bash <(curl -sL "${AGENT_INSTALL_URL}") uninstall
+    fi
+}
 
 # =========================================
 # 多服务器菜单
@@ -466,38 +480,40 @@ show_multi_server_menu() {
         echo -e "${GREEN}   多服务器管理 (Agent 模式)${RESET}"
         echo -e "${GREEN}=========================================${RESET}"
         echo ""
-        echo -e "${YELLOW}Agent 安装${RESET}"
+        echo -e "${YELLOW}Agent 管理${RESET}"
         echo -e "  ${CYAN}1.${RESET} 显示 Agent 安装命令"
         echo -e "  ${CYAN}2.${RESET} 在本机安装 Agent"
+        echo -e "  ${CYAN}3.${RESET} 卸载本机 Agent"
         echo ""
         echo -e "${YELLOW}服务器管理${RESET}"
-        echo -e "  ${CYAN}3.${RESET} 添加服务器"
-        echo -e "  ${CYAN}4.${RESET} 删除服务器"
-        echo -e "  ${CYAN}5.${RESET} 查看服务器列表"
+        echo -e "  ${CYAN}4.${RESET} 添加服务器"
+        echo -e "  ${CYAN}5.${RESET} 删除服务器"
+        echo -e "  ${CYAN}6.${RESET} 查看服务器列表"
         echo ""
         echo -e "${YELLOW}状态监控${RESET}"
-        echo -e "  ${CYAN}6.${RESET} 批量查看状态"
-        echo -e "  ${CYAN}7.${RESET} 查看单个服务器详情"
+        echo -e "  ${CYAN}7.${RESET} 批量查看状态"
+        echo -e "  ${CYAN}8.${RESET} 查看单个服务器详情"
         echo ""
         echo -e "${YELLOW}批量操作${RESET}"
-        echo -e "  ${CYAN}8.${RESET} 批量重启服务"
-        echo -e "  ${CYAN}9.${RESET} 批量卸载服务"
+        echo -e "  ${CYAN}9.${RESET} 批量重启服务"
+        echo -e "  ${CYAN}10.${RESET} 批量卸载服务"
         echo ""
         echo -e "  ${CYAN}0.${RESET} 返回上级菜单"
         echo ""
         
-        read -p "请选择 [0-9]: " choice
+        read -p "请选择 [0-10]: " choice
         
         case $choice in
             1) show_agent_install_command ;;
             2) install_agent_local ;;
-            3) add_server ;;
-            4) remove_server ;;
-            5) list_servers ;;
-            6) batch_status ;;
-            7) view_server_details ;;
-            8) batch_restart ;;
-            9) batch_uninstall ;;
+            3) uninstall_agent_local ;;
+            4) add_server ;;
+            5) remove_server ;;
+            6) list_servers ;;
+            7) batch_status ;;
+            8) view_server_details ;;
+            9) batch_restart ;;
+            10) batch_uninstall ;;
             0) return ;;
             *) echo -e "${RED}无效选择${RESET}" ;;
         esac
