@@ -112,11 +112,5 @@ validate_email() {
 }
 
 # =========================================
-# 导出函数
+# 注意: 函数通过 source 加载，无需 export -f
 # =========================================
-export -f validate_port
-export -f check_port
-export -f validate_domain
-export -f validate_ipv4
-export -f validate_ipv6
-export -f validate_email
