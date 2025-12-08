@@ -277,12 +277,5 @@ clear_status_cache() {
 }
 
 # =========================================
-# 导出函数
+# 注意: 函数通过 source 加载，无需 export -f
 # =========================================
-export -f check_root
-export -f detect_package_manager
-export -f detect_architecture
-export -f install_dependencies
-export -f get_server_ip
-export -f get_all_service_status
-export -f clear_status_cache
