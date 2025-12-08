@@ -25,21 +25,36 @@ download_singbox() {
         
         detect_architecture
         
-        SINGBOX_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        SINGBOX_VERSION=${SINGBOX_VERSION:-$DEFAULT_SINGBOX_VERSION}
+        # 使用统一的版本获取函数
+        SINGBOX_VERSION=$(get_latest_version "" "sing-box" "$DEFAULT_SINGBOX_VERSION")
         
         echo -e "${GREEN}Sing-box 版本: ${SINGBOX_VERSION}${RESET}"
         
         local url="https://github.com/SagerNet/sing-box/releases/download/${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION#v}-linux-${SINGBOX_ARCH}.tar.gz"
+        local temp_file=$(create_temp_file ".tar.gz")
         
+        if ! download_file "$url" "$temp_file" 3 5; then
+            rm -f "$temp_file" 2>/dev/null || true
+            return 1
+        fi
+        
+        # 解压并安装
         cd /tmp || return 1
-        wget -q "$url" -O sing-box.tar.gz || return 1
-        tar -xzf sing-box.tar.gz
+        tar -xzf "$temp_file" || { rm -f "$temp_file"; return 1; }
+        rm -f "$temp_file"
         
         local dir=$(find /tmp -type d -name "sing-box-*-linux-${SINGBOX_ARCH}" | head -n 1)
-        [ -n "$dir" ] && mv "$dir/sing-box" /usr/local/bin/
-        chmod +x /usr/local/bin/sing-box
-        rm -rf /tmp/sing-box*
+        if [ -n "$dir" ]; then
+            mv "$dir/sing-box" /usr/local/bin/
+            chmod +x /usr/local/bin/sing-box
+            rm -rf "$dir"
+        else
+            log_message "ERROR" "解压 Sing-box 失败"
+            return 1
+        fi
+        
+        # 清理临时文件
+        rm -rf /tmp/sing-box* 2>/dev/null || true
         
         echo -e "${GREEN}✓ Sing-box 安装成功${RESET}"
     fi
@@ -191,6 +206,9 @@ EOF
     systemctl enable sing-box
     systemctl start sing-box
     
+    # 验证服务启动
+    verify_service_started "sing-box" || log_message "WARN" "Sing-box 服务启动异常"
+    
     # 保存配置
     cat <<EOF > /etc/singbox-proxy-config.txt
 TYPE=singbox
@@ -204,6 +222,9 @@ SHADOW_TLS_PORT=$SINGBOX_SHADOW_TLS_PORT
 SHADOW_TLS_PASSWORD=$SINGBOX_SHADOW_TLS_PASSWORD
 TLS_DOMAIN=$SINGBOX_TLS_DOMAIN
 EOF
+    
+    # 设置配置文件权限
+    secure_config_file "/etc/singbox-proxy-config.txt"
     
     echo ""
     echo -e "${GREEN}=========================================${RESET}"
@@ -253,4 +274,75 @@ view_singbox_config() {
     echo -e "${CYAN}Surge:${RESET}"
     echo -e "${GREEN}Proxy = ss, ${SERVER_IP}, ${SHADOW_TLS_PORT}, encrypt-method=${SS_METHOD}, password=${SS_PASSWORD}, shadow-tls-password=${SHADOW_TLS_PASSWORD}, shadow-tls-sni=${TLS_DOMAIN}, shadow-tls-version=3${RESET}"
     echo ""
+}
+
+# =========================================
+# 更新 Sing-box
+# =========================================
+update_singbox() {
+    if ! check_singbox_installed; then
+        echo -e "${RED}Sing-box 未安装${RESET}"
+        return
+    fi
+    
+    echo -e "${GREEN}正在检查 Sing-box 更新...${RESET}"
+    
+    detect_architecture
+    
+    local current_version=""
+    if [ -f /etc/singbox-proxy-config.txt ]; then
+        current_version=$(grep "^SINGBOX_VERSION=" /etc/singbox-proxy-config.txt 2>/dev/null | cut -d'=' -f2)
+    fi
+    local latest_version=$(get_latest_version "" "sing-box" "$DEFAULT_SINGBOX_VERSION")
+    
+    echo -e "${CYAN}当前版本: ${YELLOW}${current_version:-未知}${RESET}"
+    echo -e "${CYAN}最新版本: ${YELLOW}${latest_version}${RESET}"
+    
+    if [ "$current_version" == "$latest_version" ]; then
+        echo -e "${GREEN}已是最新版本${RESET}"
+        return
+    fi
+    
+    read -p "确认更新？(y/n): " confirm
+    [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && return
+    
+    # 停止服务
+    systemctl stop sing-box 2>/dev/null
+    
+    # 备份旧版本
+    cp /usr/local/bin/sing-box /usr/local/bin/sing-box.bak 2>/dev/null
+    
+    # 下载新版本
+    local url="https://github.com/SagerNet/sing-box/releases/download/${latest_version}/sing-box-${latest_version#v}-linux-${SINGBOX_ARCH}.tar.gz"
+    local temp_file=$(create_temp_file ".tar.gz")
+    
+    if download_file "$url" "$temp_file" 3 5; then
+        cd /tmp || { rm -f "$temp_file"; return 1; }
+        tar -xzf "$temp_file" || { rm -f "$temp_file"; return 1; }
+        rm -f "$temp_file"
+        
+        local dir=$(find /tmp -type d -name "sing-box-*-linux-${SINGBOX_ARCH}" | head -n 1)
+        if [ -n "$dir" ]; then
+            mv "$dir/sing-box" /usr/local/bin/
+            chmod +x /usr/local/bin/sing-box
+            rm -rf "$dir"
+        fi
+        
+        rm -rf /tmp/sing-box* 2>/dev/null || true
+        
+        # 更新配置文件中的版本
+        sed -i "s/SINGBOX_VERSION=.*/SINGBOX_VERSION=$latest_version/" /etc/singbox-proxy-config.txt 2>/dev/null
+        
+        systemctl start sing-box
+        verify_service_started "sing-box"
+        
+        echo -e "${GREEN}✓ 更新成功！${RESET}"
+    else
+        # 回滚
+        mv /usr/local/bin/sing-box.bak /usr/local/bin/sing-box 2>/dev/null
+        systemctl start sing-box
+        echo -e "${RED}更新失败，已回滚${RESET}"
+    fi
+    
+    rm -f /usr/local/bin/sing-box.bak 2>/dev/null
 }
