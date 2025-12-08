@@ -159,6 +159,9 @@ EOF
     systemctl enable sing-box-reality
     systemctl start sing-box-reality
     
+    # 验证服务启动
+    verify_service_started "sing-box-reality" || log_message "WARN" "Reality 服务启动异常"
+    
     cat <<EOF > /etc/reality-proxy-config.txt
 TYPE=reality
 SERVER_IP=$SERVER_IP
@@ -170,6 +173,9 @@ REALITY_PUBLIC_KEY=$REALITY_PUBLIC_KEY
 REALITY_SHORT_ID=$REALITY_SHORT_ID
 REALITY_DEST=$REALITY_DEST
 EOF
+    
+    # 设置配置文件权限
+    secure_config_file "/etc/reality-proxy-config.txt"
     
     local link="vless://${REALITY_UUID}@${SERVER_IP}:${REALITY_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_DEST}&fp=chrome&pbk=${REALITY_PUBLIC_KEY}&sid=${REALITY_SHORT_ID}&type=tcp#Reality-${SERVER_IP}"
     
@@ -229,4 +235,75 @@ view_reality_config() {
     echo -e "${CYAN}分享链接:${RESET}"
     echo -e "${GREEN}${link}${RESET}"
     echo ""
+}
+
+# =========================================
+# 更新 Reality (sing-box 核心)
+# =========================================
+update_reality() {
+    if ! check_reality_installed; then
+        echo -e "${RED}Reality 未安装${RESET}"
+        return
+    fi
+    
+    echo -e "${GREEN}正在检查 Reality (sing-box) 更新...${RESET}"
+    
+    detect_architecture
+    
+    local current_version=""
+    if [ -f /etc/reality-proxy-config.txt ]; then
+        current_version=$(grep "^SINGBOX_VERSION=" /etc/reality-proxy-config.txt 2>/dev/null | cut -d'=' -f2)
+    fi
+    local latest_version=$(get_latest_version "" "sing-box" "$DEFAULT_SINGBOX_VERSION")
+    
+    echo -e "${CYAN}当前版本: ${YELLOW}${current_version:-未知}${RESET}"
+    echo -e "${CYAN}最新版本: ${YELLOW}${latest_version}${RESET}"
+    
+    if [ "$current_version" == "$latest_version" ]; then
+        echo -e "${GREEN}已是最新版本${RESET}"
+        return
+    fi
+    
+    read -p "确认更新？(y/n): " confirm
+    [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && return
+    
+    # 停止服务
+    systemctl stop sing-box-reality 2>/dev/null
+    
+    # 备份旧版本
+    cp /usr/local/bin/sing-box /usr/local/bin/sing-box.bak 2>/dev/null
+    
+    # 下载新版本
+    local url="https://github.com/SagerNet/sing-box/releases/download/${latest_version}/sing-box-${latest_version#v}-linux-${SINGBOX_ARCH}.tar.gz"
+    local temp_file=$(create_temp_file ".tar.gz")
+    
+    if download_file "$url" "$temp_file" 3 5; then
+        cd /tmp || { rm -f "$temp_file"; return 1; }
+        tar -xzf "$temp_file" || { rm -f "$temp_file"; return 1; }
+        rm -f "$temp_file"
+        
+        local dir=$(find /tmp -type d -name "sing-box-*-linux-${SINGBOX_ARCH}" | head -n 1)
+        if [ -n "$dir" ]; then
+            mv "$dir/sing-box" /usr/local/bin/
+            chmod +x /usr/local/bin/sing-box
+            rm -rf "$dir"
+        fi
+        
+        rm -rf /tmp/sing-box* 2>/dev/null || true
+        
+        # 更新配置文件中的版本
+        sed -i "s/SINGBOX_VERSION=.*/SINGBOX_VERSION=$latest_version/" /etc/reality-proxy-config.txt 2>/dev/null
+        
+        systemctl start sing-box-reality
+        verify_service_started "sing-box-reality"
+        
+        echo -e "${GREEN}✓ 更新成功！${RESET}"
+    else
+        # 回滚
+        mv /usr/local/bin/sing-box.bak /usr/local/bin/sing-box 2>/dev/null
+        systemctl start sing-box-reality
+        echo -e "${RED}更新失败，已回滚${RESET}"
+    fi
+    
+    rm -f /usr/local/bin/sing-box.bak 2>/dev/null
 }
