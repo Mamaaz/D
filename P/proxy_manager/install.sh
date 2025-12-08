@@ -92,12 +92,28 @@ install_proxy_manager() {
     # 创建软链接
     ln -sf "$INSTALL_DIR/proxy-manager.sh" /usr/local/bin/proxy-manager
     
-    echo -e "${GREEN}✓ 安装完成！${RESET}"
+    echo -e "${GREEN}✓ Proxy Manager 安装完成！${RESET}"
     echo ""
-    echo -e "${CYAN}使用方法:${RESET}"
-    echo -e "  ${YELLOW}proxy-manager${RESET}        # 运行管理脚本"
-    echo -e "  ${YELLOW}proxy-manager update${RESET} # 更新到最新版"
+    
+    # 询问是否安装 Agent
+    echo -e "${CYAN}是否同时安装 Agent 探针？${RESET}"
+    echo -e "${YELLOW}(Agent 用于让其他服务器远程管理此 VPS)${RESET}"
     echo ""
+    read -p "安装 Agent？(y/n，默认: n): " install_agent
+    
+    if [ "$install_agent" == "y" ] || [ "$install_agent" == "Y" ]; then
+        echo ""
+        bash "$INSTALL_DIR/agent/install-agent.sh"
+    else
+        echo ""
+        echo -e "${CYAN}使用方法:${RESET}"
+        echo -e "  ${YELLOW}proxy-manager${RESET}        # 运行管理脚本"
+        echo -e "  ${YELLOW}proxy-manager update${RESET} # 更新到最新版"
+        echo ""
+        echo -e "${CYAN}如需安装 Agent，运行:${RESET}"
+        echo -e "  ${YELLOW}proxy-manager${RESET} -> 选择 11 -> 选择 2"
+        echo ""
+    fi
 }
 
 # 更新功能
@@ -111,6 +127,20 @@ update_proxy_manager() {
     echo -e "${GREEN}✓ 更新完成！${RESET}"
 }
 
+# 仅安装 Agent
+install_agent_only() {
+    install_deps
+    
+    mkdir -p /tmp/proxy-agent-install
+    cd /tmp/proxy-agent-install
+    
+    curl -sL "${RAW_URL}/agent/install-agent.sh" -o install-agent.sh
+    chmod +x install-agent.sh
+    bash install-agent.sh
+    
+    rm -rf /tmp/proxy-agent-install
+}
+
 # 主逻辑
 case "${1:-install}" in
     update)
@@ -121,6 +151,9 @@ case "${1:-install}" in
         rm -f /usr/local/bin/proxy-manager
         rm -rf "$INSTALL_DIR"
         echo -e "${GREEN}✓ 卸载完成${RESET}"
+        ;;
+    agent)
+        install_agent_only
         ;;
     *)
         install_deps
