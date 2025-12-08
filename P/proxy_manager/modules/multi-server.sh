@@ -489,6 +489,7 @@ remote_install_service() {
     # 收集安装参数
     local install_port=""
     local install_domain=""
+    local install_sni=""
     local json_data=""
     
     echo ""
@@ -496,12 +497,22 @@ remote_install_service() {
     if [ "$service_type" == "snell" ] || [ "$service_type" == "singbox" ]; then
         read -p "Shadow-TLS 端口 (默认: 8443): " install_port
         install_port=${install_port:-8443}
-        json_data="{\"type\": \"$service_type\", \"port\": $install_port}"
+        
+        echo ""
+        read -p "伪装域名/SNI (默认: www.microsoft.com): " install_sni
+        install_sni=${install_sni:-www.microsoft.com}
+        
+        json_data="{\"type\": \"$service_type\", \"port\": $install_port, \"sni\": \"$install_sni\"}"
         
     elif [ "$service_type" == "reality" ]; then
         read -p "Reality 端口 (默认: 443): " install_port
         install_port=${install_port:-443}
-        json_data="{\"type\": \"$service_type\", \"port\": $install_port}"
+        
+        echo ""
+        read -p "伪装域名/SNI (默认: www.microsoft.com): " install_sni
+        install_sni=${install_sni:-www.microsoft.com}
+        
+        json_data="{\"type\": \"$service_type\", \"port\": $install_port, \"sni\": \"$install_sni\"}"
         
     elif [ "$service_type" == "hysteria2" ]; then
         read -p "Hysteria2 端口 (默认: 443): " install_port
@@ -514,7 +525,7 @@ remote_install_service() {
         read -p "选择 [1-2] (默认: 1): " cert_choice
         
         if [ "$cert_choice" == "2" ]; then
-            read -p "输入域名: " install_domain
+            read -p "输入你的域名: " install_domain
             if [ -z "$install_domain" ]; then
                 echo -e "${RED}域名不能为空，将使用自签名证书${RESET}"
                 json_data="{\"type\": \"$service_type\", \"port\": $install_port}"
