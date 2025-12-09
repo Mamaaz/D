@@ -81,10 +81,57 @@ apply_routing_config() {
         outbounds=$(generate_outbounds_config 2>/dev/null || echo "[]")
     fi
     
-    # 生成 rule_set
+    # 生成 rule_set (先从订阅获取)
     local rule_sets="[]"
     if [ -f "$UNIFIED_CONFIG_DIR/subscriptions.json" ]; then
         rule_sets=$(generate_ruleset_config 2>/dev/null || echo "[]")
+    fi
+    
+    # 自动为 geosite/geoip 规则添加 rule_set 定义
+    if [ -f "$UNIFIED_CONFIG_DIR/rules.json" ]; then
+        local rules_count=$(jq '.rules | length' "$UNIFIED_CONFIG_DIR/rules.json" 2>/dev/null || echo 0)
+        
+        for ((i=0; i<rules_count; i++)); do
+            local type=$(jq -r ".rules[$i].type" "$UNIFIED_CONFIG_DIR/rules.json")
+            local value=$(jq -r ".rules[$i].value" "$UNIFIED_CONFIG_DIR/rules.json")
+            local enabled=$(jq -r ".rules[$i].enabled" "$UNIFIED_CONFIG_DIR/rules.json")
+            
+            [ "$enabled" != "true" ] && continue
+            
+            if [ "$type" = "geosite" ]; then
+                local tag="geosite-$value"
+                local exists=$(echo "$rule_sets" | jq --arg t "$tag" '[.[] | select(.tag == $t)] | length')
+                if [ "$exists" = "0" ]; then
+                    local rs=$(jq -n \
+                        --arg tag "$tag" \
+                        --arg url "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-$value.srs" \
+                        '{
+                            "tag": $tag,
+                            "type": "remote",
+                            "format": "binary",
+                            "url": $url,
+                            "download_detour": "direct"
+                        }')
+                    rule_sets=$(echo "$rule_sets" | jq --argjson rs "$rs" '. += [$rs]')
+                fi
+            elif [ "$type" = "geoip" ]; then
+                local tag="geoip-$value"
+                local exists=$(echo "$rule_sets" | jq --arg t "$tag" '[.[] | select(.tag == $t)] | length')
+                if [ "$exists" = "0" ]; then
+                    local rs=$(jq -n \
+                        --arg tag "$tag" \
+                        --arg url "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-$value.srs" \
+                        '{
+                            "tag": $tag,
+                            "type": "remote",
+                            "format": "binary",
+                            "url": $url,
+                            "download_detour": "direct"
+                        }')
+                    rule_sets=$(echo "$rule_sets" | jq --argjson rs "$rs" '. += [$rs]')
+                fi
+            fi
+        done
     fi
     
     # 生成路由规则
@@ -108,14 +155,12 @@ apply_routing_config() {
         final=$(jq -r '.final // "direct"' "$UNIFIED_CONFIG_DIR/rules.json" 2>/dev/null)
     fi
     
-    # 生成完整配置
+    # 生成完整配置 (sing-box 1.12+ 兼容格式)
     local full_config=$(jq -n \
         --argjson outbounds "$outbounds" \
         --argjson rule_sets "$rule_sets" \
         --argjson rules "$route_rules" \
         --arg final "$final" \
-        --arg geoip "$UNIFIED_CONFIG_DIR/geoip.db" \
-        --arg geosite "$UNIFIED_CONFIG_DIR/geosite.db" \
         '{
             "log": {
                 "level": "info",
@@ -125,7 +170,9 @@ apply_routing_config() {
                 "servers": [
                     {
                         "tag": "google",
-                        "address": "tls://8.8.8.8"
+                        "address": "https://8.8.8.8/dns-query",
+                        "address_resolver": "local",
+                        "strategy": "prefer_ipv4"
                     },
                     {
                         "tag": "local",
@@ -135,19 +182,17 @@ apply_routing_config() {
                 ],
                 "rules": [
                     {
-                        "geosite": "cn",
+                        "domain_suffix": [".cn"],
+                        "server": "local"
+                    },
+                    {
+                        "domain_keyword": ["baidu", "taobao", "aliyun", "tencent", "qq"],
                         "server": "local"
                     }
                 ],
                 "final": "google"
             },
             "route": {
-                "geoip": {
-                    "path": $geoip
-                },
-                "geosite": {
-                    "path": $geosite
-                },
                 "rule_set": $rule_sets,
                 "rules": $rules,
                 "final": $final,
