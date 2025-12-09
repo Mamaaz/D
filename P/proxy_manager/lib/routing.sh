@@ -414,10 +414,12 @@ generate_route_config() {
         local rule_obj=""
         case $type in
             geosite)
-                rule_obj="{\"geosite\": \"$value\", \"outbound\": \"$outbound\"}"
+                # sing-box 1.12+ 使用 rule_set 格式
+                rule_obj="{\"rule_set\": \"geosite-$value\", \"outbound\": \"$outbound\"}"
                 ;;
             geoip)
-                rule_obj="{\"geoip\": \"$value\", \"outbound\": \"$outbound\"}"
+                # sing-box 1.12+ 使用 rule_set 格式
+                rule_obj="{\"rule_set\": \"geoip-$value\", \"outbound\": \"$outbound\"}"
                 ;;
             domain)
                 rule_obj="{\"domain\": [\"$value\"], \"outbound\": \"$outbound\"}"
@@ -437,14 +439,12 @@ generate_route_config() {
     
     local final=$(jq -r '.final' "$RULES_FILE" 2>/dev/null || echo "direct")
     
-    # 生成完整的 route 配置
+    # 生成完整的 route 配置 (sing-box 1.12+ 兼容格式)
     jq -n \
         --argjson rules "$rules_json" \
         --arg final "$final" \
         '{
             "route": {
-                "geoip": {"path": "/etc/unified-singbox/geoip.db"},
-                "geosite": {"path": "/etc/unified-singbox/geosite.db"},
                 "rules": $rules,
                 "final": $final,
                 "auto_detect_interface": true
