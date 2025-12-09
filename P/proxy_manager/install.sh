@@ -1,7 +1,7 @@
 #!/bin/bash
 # =========================================
 # Proxy Manager - 在线安装脚本
-# 一行命令安装: bash <(curl -sL https://raw.githubusercontent.com/你的用户名/proxy-manager/main/install.sh)
+# 一行命令安装: bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager/install.sh)
 # =========================================
 
 set -e
@@ -19,7 +19,7 @@ GITHUB_REPO="D"
 BRANCH="main"
 SUBDIR="P/proxy_manager"
 INSTALL_DIR="/opt/proxy-manager"
-RAW_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${BRANCH}/${SUBDIR}"
+RAW_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${BRANCH}/${SUBDIR}"
 
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${RESET}"
 echo -e "${CYAN}║${RESET}       ${GREEN}Proxy Manager 在线安装${RESET}                              ${CYAN}║${RESET}"
@@ -38,13 +38,32 @@ install_deps() {
     
     if command -v apt-get &> /dev/null; then
         apt-get update -qq
-        apt-get install -y -qq git curl wget
+        apt-get install -y -qq git curl wget jq
     elif command -v yum &> /dev/null; then
-        yum install -y -q git curl wget
+        yum install -y -q git curl wget jq
     elif command -v dnf &> /dev/null; then
-        dnf install -y -q git curl wget
+        dnf install -y -q git curl wget jq
     elif command -v pacman &> /dev/null; then
-        pacman -Sy --noconfirm git curl wget
+        pacman -Sy --noconfirm git curl wget jq
+    fi
+}
+
+# 下载文件函数
+download_file() {
+    local url=$1
+    local output=$2
+    
+    if curl -sL "$url" -o "$output" 2>/dev/null; then
+        # 检查文件是否为空或过小（可能是404页面）
+        local size=$(stat -f%z "$output" 2>/dev/null || stat -c%s "$output" 2>/dev/null || echo 0)
+        if [ "$size" -lt 100 ]; then
+            echo -e "${YELLOW}警告: $output 文件过小，可能下载失败${RESET}"
+            return 1
+        fi
+        return 0
+    else
+        echo -e "${RED}下载失败: $url${RESET}"
+        return 1
     fi
 }
 
@@ -58,24 +77,32 @@ install_proxy_manager() {
         mv "$INSTALL_DIR" "${INSTALL_DIR}.bak.$(date +%Y%m%d%H%M%S)"
     fi
     
-    # 由于文件在子目录，使用 curl 单独下载每个文件
+    # 创建目录结构
     mkdir -p "$INSTALL_DIR"/{lib,modules,config}
     
     echo -e "${CYAN}正在下载文件...${RESET}"
     
     # 下载主文件
-    curl -sL "${RAW_URL}/proxy-manager.sh" -o "$INSTALL_DIR/proxy-manager.sh"
-    curl -sL "${RAW_URL}/install.sh" -o "$INSTALL_DIR/install.sh"
+    download_file "${RAW_URL}/proxy-manager.sh" "$INSTALL_DIR/proxy-manager.sh"
+    download_file "${RAW_URL}/install.sh" "$INSTALL_DIR/install.sh"
     
-    # 下载 lib 目录
-    for f in common.sh config.sh system.sh validation.sh; do
-        curl -sL "${RAW_URL}/lib/${f}" -o "$INSTALL_DIR/lib/${f}"
+    # 下载 lib 目录 - 基础库
+    for f in common.sh config.sh system.sh validation.sh routing.sh; do
+        download_file "${RAW_URL}/lib/${f}" "$INSTALL_DIR/lib/${f}"
     done
     
-    # 下载 modules 目录
+    # 下载 lib 目录 - 分流管理库 (v3.3 新增)
+    for f in outbound.sh geo-update.sh subscriptions.sh; do
+        download_file "${RAW_URL}/lib/${f}" "$INSTALL_DIR/lib/${f}"
+    done
+    
+    # 下载 modules 目录 - 服务模块
     for f in snell.sh singbox.sh reality.sh hysteria2.sh cert.sh; do
-        curl -sL "${RAW_URL}/modules/${f}" -o "$INSTALL_DIR/modules/${f}"
+        download_file "${RAW_URL}/modules/${f}" "$INSTALL_DIR/modules/${f}"
     done
+    
+    # 下载 modules 目录 - 分流菜单 (v3.3 新增)
+    download_file "${RAW_URL}/modules/routing-menu.sh" "$INSTALL_DIR/modules/routing-menu.sh"
     
     # 设置权限
     chmod +x "$INSTALL_DIR/proxy-manager.sh"
