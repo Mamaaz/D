@@ -29,6 +29,10 @@ source "${LIB_DIR}/common.sh"
 source "${LIB_DIR}/config.sh"
 source "${LIB_DIR}/system.sh"
 source "${LIB_DIR}/validation.sh"
+source "${LIB_DIR}/routing.sh"
+source "${LIB_DIR}/outbound.sh"
+source "${LIB_DIR}/geo-update.sh"
+source "${LIB_DIR}/subscriptions.sh"
 
 # =========================================
 # 加载服务模块
@@ -38,11 +42,12 @@ source "${MODULE_DIR}/singbox.sh"
 source "${MODULE_DIR}/reality.sh"
 source "${MODULE_DIR}/cert.sh"
 source "${MODULE_DIR}/hysteria2.sh"
+source "${MODULE_DIR}/routing-menu.sh"
 
 # =========================================
 # 版本信息
 # =========================================
-SCRIPT_VERSION="3.2"
+SCRIPT_VERSION="3.3"
 
 # =========================================
 # 信号处理
@@ -114,9 +119,12 @@ show_menu() {
     echo -e "${GREEN}│${RESET}    ${CYAN}9.${RESET} 续签 Hysteria2 证书                                  ${GREEN}│${RESET}"
     echo -e "${GREEN}│${RESET}    ${CYAN}10.${RESET} 查看证书状态                                        ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
+    echo -e "${GREEN}│${RESET}  ${YELLOW}分流管理${RESET}                                                 ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}11.${RESET} 高级分流管理 (落地代理/规则/订阅)                   ${GREEN}│${RESET}"
+    echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}  ${YELLOW}系统管理${RESET}                                                 ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}11.${RESET} 更新 Proxy Manager                                  ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}12.${RESET} 完全卸载 Proxy Manager                              ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}12.${RESET} 更新 Proxy Manager                                  ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}13.${RESET} 完全卸载 Proxy Manager                              ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}    ${CYAN}0.${RESET} 退出                                                 ${GREEN}│${RESET}"
     echo -e "${GREEN}└─────────────────────────────────────────────────────────────┘${RESET}"
@@ -336,7 +344,7 @@ main() {
         show_status
         show_menu
         
-        read -p "请选择 [0-12]: " choice
+        read -p "请选择 [0-13]: " choice
         
         case $choice in
             1) install_snell; clear_status_cache; read -p "按回车键继续..." ;;
@@ -349,8 +357,9 @@ main() {
             8) show_uninstall_submenu ;;
             9) renew_hysteria2_cert; read -p "按回车键继续..." ;;
             10) view_cert_status; read -p "按回车键继续..." ;;
-            11) update_proxy_manager ;;
-            12) uninstall_proxy_manager ;;
+            11) routing_main_menu ;;
+            12) update_proxy_manager ;;
+            13) uninstall_proxy_manager ;;
             0) cleanup ;;
             *) echo -e "${RED}无效选择${RESET}"; sleep 1 ;;
         esac
