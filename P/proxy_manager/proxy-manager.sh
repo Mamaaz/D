@@ -42,6 +42,7 @@ source "${MODULE_DIR}/singbox.sh"
 source "${MODULE_DIR}/reality.sh"
 source "${MODULE_DIR}/cert.sh"
 source "${MODULE_DIR}/hysteria2.sh"
+source "${MODULE_DIR}/anytls.sh"
 source "${MODULE_DIR}/routing-menu.sh"
 
 # =========================================
@@ -79,7 +80,7 @@ show_status() {
     echo -e "${CYAN}│${RESET}  ${YELLOW}服务状态${RESET}                                                 ${CYAN}│${RESET}"
     echo -e "${CYAN}├─────────────────────────────────────────────────────────────┤${RESET}"
     
-    local services=("snell:Snell + Shadow-TLS" "sing-box:Sing-box (SS)" "sing-box-reality:VLESS Reality" "hysteria2:Hysteria2")
+    local services=("snell:Snell + Shadow-TLS" "sing-box:Sing-box (SS)" "sing-box-reality:VLESS Reality" "hysteria2:Hysteria2" "anytls:AnyTLS")
     
     for item in "${services[@]}"; do
         local service_name="${item%%:*}"
@@ -108,23 +109,24 @@ show_menu() {
     echo -e "${GREEN}│${RESET}    ${CYAN}2.${RESET} 安装 Sing-box (SS-2022 + Shadow-TLS)                 ${GREEN}│${RESET}"
     echo -e "${GREEN}│${RESET}    ${CYAN}3.${RESET} 安装 VLESS Reality                                   ${GREEN}│${RESET}"
     echo -e "${GREEN}│${RESET}    ${CYAN}4.${RESET} 安装 Hysteria2 (Let's Encrypt)                       ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}5.${RESET} 安装 AnyTLS (Let's Encrypt)                          ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}  ${YELLOW}管理服务${RESET}                                                 ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}5.${RESET} 查看服务配置                                         ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}6.${RESET} 查看服务日志                                         ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}7.${RESET} 更新服务                                             ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}8.${RESET} 卸载服务                                             ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}6.${RESET} 查看服务配置                                         ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}7.${RESET} 查看服务日志                                         ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}8.${RESET} 更新服务                                             ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}9.${RESET} 卸载服务                                             ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}  ${YELLOW}证书管理${RESET}                                                 ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}9.${RESET} 续签 Hysteria2 证书                                  ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}10.${RESET} 查看证书状态                                        ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}10.${RESET} 续签证书 (Hysteria2/AnyTLS)                         ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}11.${RESET} 查看证书状态                                        ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}  ${YELLOW}分流管理${RESET}                                                 ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}11.${RESET} 高级分流管理 (落地代理/规则/订阅)                   ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}12.${RESET} 高级分流管理 (落地代理/规则/订阅)                   ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}  ${YELLOW}系统管理${RESET}                                                 ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}12.${RESET} 更新 Proxy Manager                                  ${GREEN}│${RESET}"
-    echo -e "${GREEN}│${RESET}    ${CYAN}13.${RESET} 完全卸载 Proxy Manager                              ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}13.${RESET} 更新 Proxy Manager                                  ${GREEN}│${RESET}"
+    echo -e "${GREEN}│${RESET}    ${CYAN}14.${RESET} 完全卸载 Proxy Manager                              ${GREEN}│${RESET}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${RESET}"
     echo -e "${GREEN}│${RESET}    ${CYAN}0.${RESET} 退出                                                 ${GREEN}│${RESET}"
     echo -e "${GREEN}└─────────────────────────────────────────────────────────────┘${RESET}"
@@ -138,16 +140,18 @@ show_config_submenu() {
     echo -e "${YELLOW}2.${RESET} Sing-box (SS-2022)"
     echo -e "${YELLOW}3.${RESET} VLESS Reality"
     echo -e "${YELLOW}4.${RESET} Hysteria2"
+    echo -e "${YELLOW}5.${RESET} AnyTLS"
     echo -e "${YELLOW}0.${RESET} 返回"
     echo ""
     
-    read -p "请选择 [0-4]: " choice
+    read -p "请选择 [0-5]: " choice
     
     case $choice in
         1) view_snell_config ;;
         2) view_singbox_config ;;
         3) view_reality_config ;;
         4) view_hysteria2_config ;;
+        5) view_anytls_config ;;
         0) return ;;
         *) echo -e "${RED}无效选择${RESET}" ;;
     esac
@@ -162,16 +166,18 @@ show_log_submenu() {
     echo -e "${YELLOW}2.${RESET} Sing-box"
     echo -e "${YELLOW}3.${RESET} Reality"
     echo -e "${YELLOW}4.${RESET} Hysteria2"
+    echo -e "${YELLOW}5.${RESET} AnyTLS"
     echo -e "${YELLOW}0.${RESET} 返回"
     echo ""
     
-    read -p "请选择 [0-4]: " choice
+    read -p "请选择 [0-5]: " choice
     
     case $choice in
         1) journalctl -u snell -n 50 --no-pager 2>/dev/null || echo -e "${RED}服务未安装${RESET}" ;;
         2) journalctl -u sing-box -n 50 --no-pager 2>/dev/null || echo -e "${RED}服务未安装${RESET}" ;;
         3) journalctl -u sing-box-reality -n 50 --no-pager 2>/dev/null || echo -e "${RED}服务未安装${RESET}" ;;
         4) journalctl -u hysteria2 -n 50 --no-pager 2>/dev/null || echo -e "${RED}服务未安装${RESET}" ;;
+        5) journalctl -u anytls -n 50 --no-pager 2>/dev/null || echo -e "${RED}服务未安装${RESET}" ;;
         0) return ;;
         *) echo -e "${RED}无效选择${RESET}" ;;
     esac
@@ -186,16 +192,18 @@ show_update_submenu() {
     echo -e "${YELLOW}2.${RESET} Sing-box (SS-2022)"
     echo -e "${YELLOW}3.${RESET} VLESS Reality"
     echo -e "${YELLOW}4.${RESET} Hysteria2"
+    echo -e "${YELLOW}5.${RESET} AnyTLS"
     echo -e "${YELLOW}0.${RESET} 返回"
     echo ""
     
-    read -p "请选择 [0-4]: " choice
+    read -p "请选择 [0-5]: " choice
     
     case $choice in
         1) update_snell ;;
         2) update_singbox ;;
         3) update_reality ;;
         4) update_hysteria2 ;;
+        5) update_anytls ;;
         0) return ;;
         *) echo -e "${RED}无效选择${RESET}" ;;
     esac
@@ -210,16 +218,18 @@ show_uninstall_submenu() {
     echo -e "${YELLOW}2.${RESET} Sing-box (SS-2022)"
     echo -e "${YELLOW}3.${RESET} VLESS Reality"
     echo -e "${YELLOW}4.${RESET} Hysteria2"
+    echo -e "${YELLOW}5.${RESET} AnyTLS"
     echo -e "${YELLOW}0.${RESET} 返回"
     echo ""
     
-    read -p "请选择 [0-4]: " choice
+    read -p "请选择 [0-5]: " choice
     
     case $choice in
         1) read -p "确认卸载 Snell？(y/n): " confirm; [ "$confirm" == "y" ] && uninstall_snell ;;
         2) read -p "确认卸载 Sing-box？(y/n): " confirm; [ "$confirm" == "y" ] && uninstall_singbox ;;
         3) read -p "确认卸载 Reality？(y/n): " confirm; [ "$confirm" == "y" ] && uninstall_reality ;;
         4) read -p "确认卸载 Hysteria2？(y/n): " confirm; [ "$confirm" == "y" ] && uninstall_hysteria2 ;;
+        5) read -p "确认卸载 AnyTLS？(y/n): " confirm; [ "$confirm" == "y" ] && uninstall_anytls ;;
         0) return ;;
         *) echo -e "${RED}无效选择${RESET}" ;;
     esac
@@ -228,7 +238,27 @@ show_uninstall_submenu() {
     read -p "按回车键继续..."
 }
 
-# 更新 Proxy Manager
+# 证书续签子菜单
+show_cert_renew_submenu() {
+    echo ""
+    echo -e "${CYAN}选择要续签的证书:${RESET}"
+    echo -e "${YELLOW}1.${RESET} Hysteria2 证书"
+    echo -e "${YELLOW}2.${RESET} AnyTLS 证书"
+    echo -e "${YELLOW}0.${RESET} 返回"
+    echo ""
+    
+    read -p "请选择 [0-2]: " choice
+    
+    case $choice in
+        1) renew_hysteria2_cert ;;
+        2) renew_anytls_cert ;;
+        0) return ;;
+        *) echo -e "${RED}无效选择${RESET}" ;;
+    esac
+    
+    read -p "按回车键继续..."
+}
+
 update_proxy_manager() {
     echo ""
     echo -e "${CYAN}正在更新 Proxy Manager...${RESET}"
@@ -311,6 +341,7 @@ show_help() {
     echo -e "  - SS-2022 + Shadow-TLS (Sing-box)"
     echo -e "  - VLESS Reality"
     echo -e "  - Hysteria2"
+    echo -e "  - AnyTLS"
     echo ""
     echo -e "${YELLOW}文档:${RESET}"
     echo -e "  https://github.com/Mamaaz/D"
@@ -344,22 +375,23 @@ main() {
         show_status
         show_menu
         
-        read -p "请选择 [0-13]: " choice
+        read -p "请选择 [0-14]: " choice
         
         case $choice in
             1) install_snell; clear_status_cache; read -p "按回车键继续..." ;;
             2) install_singbox; clear_status_cache; read -p "按回车键继续..." ;;
             3) install_reality; clear_status_cache; read -p "按回车键继续..." ;;
             4) install_hysteria2; clear_status_cache; read -p "按回车键继续..." ;;
-            5) show_config_submenu ;;
-            6) show_log_submenu ;;
-            7) show_update_submenu ;;
-            8) show_uninstall_submenu ;;
-            9) renew_hysteria2_cert; read -p "按回车键继续..." ;;
-            10) view_cert_status; read -p "按回车键继续..." ;;
-            11) routing_main_menu ;;
-            12) update_proxy_manager ;;
-            13) uninstall_proxy_manager ;;
+            5) install_anytls; clear_status_cache; read -p "按回车键继续..." ;;
+            6) show_config_submenu ;;
+            7) show_log_submenu ;;
+            8) show_update_submenu ;;
+            9) show_uninstall_submenu ;;
+            10) show_cert_renew_submenu ;;
+            11) view_cert_status; read -p "按回车键继续..." ;;
+            12) routing_main_menu ;;
+            13) update_proxy_manager ;;
+            14) uninstall_proxy_manager ;;
             0) cleanup ;;
             *) echo -e "${RED}无效选择${RESET}"; sleep 1 ;;
         esac
