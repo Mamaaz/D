@@ -146,8 +146,8 @@ EOF
     SNELL_TLS_DOMAIN=$TLS_DOMAIN
     
     while true; do
-        read -p "请输入 Shadow-TLS 监听端口 (默认: 8443): " SNELL_SHADOW_TLS_PORT
-        SNELL_SHADOW_TLS_PORT=${SNELL_SHADOW_TLS_PORT:-8443}
+        read -p "请输入 Shadow-TLS 监听端口 (默认: 8444): " SNELL_SHADOW_TLS_PORT
+        SNELL_SHADOW_TLS_PORT=${SNELL_SHADOW_TLS_PORT:-8444}
         validate_port "$SNELL_SHADOW_TLS_PORT" && break
     done
     
