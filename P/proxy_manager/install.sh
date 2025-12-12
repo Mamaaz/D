@@ -97,7 +97,7 @@ install_proxy_manager() {
     done
     
     # 下载 modules 目录 - 服务模块
-    for f in snell.sh singbox.sh reality.sh hysteria2.sh cert.sh; do
+    for f in snell.sh singbox.sh reality.sh hysteria2.sh anytls.sh cert.sh; do
         download_file "${RAW_URL}/modules/${f}" "$INSTALL_DIR/modules/${f}"
     done
     
