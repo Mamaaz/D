@@ -25,67 +25,31 @@ create_anytls_config() {
     local port=$2
     local password=$3
     local domain=$4
-    local enable_fallback=$5
-    local fallback_port=${6:-8080}
+    local padding_scheme=$5
     
-    # 默认填充方案
-    local padding_scheme='["stop=8", "0=30-30", "1=100-400", "2=400-500,c,500-1000,c,500-1000,c,500-1000,c,500-1000", "3=9-9,500-1000", "4=500-1000", "5=500-1000", "6=500-1000", "7=500-1000"]'
-    
-    local config
-    if [ "$enable_fallback" = "true" ]; then
-        config=$(jq -n \
-            --arg port "$port" \
-            --arg password "$password" \
-            --arg domain "$domain" \
-            --arg fallback_port "$fallback_port" \
-            --argjson padding "$padding_scheme" \
-            '{
-                "log": {"level": "info", "timestamp": true},
-                "inbounds": [{
-                    "type": "anytls",
-                    "tag": "anytls-in",
-                    "listen": "::",
-                    "listen_port": ($port | tonumber),
-                    "users": [{"password": $password}],
-                    "padding_scheme": $padding,
-                    "tls": {
-                        "enabled": true,
-                        "server_name": $domain,
-                        "key_path": "/etc/anytls/server.key",
-                        "certificate_path": "/etc/anytls/server.crt"
-                    },
-                    "fallback": {
-                        "server": "127.0.0.1",
-                        "server_port": ($fallback_port | tonumber)
-                    }
-                }],
-                "outbounds": [{"type": "direct", "tag": "direct"}]
-            }')
-    else
-        config=$(jq -n \
-            --arg port "$port" \
-            --arg password "$password" \
-            --arg domain "$domain" \
-            --argjson padding "$padding_scheme" \
-            '{
-                "log": {"level": "info", "timestamp": true},
-                "inbounds": [{
-                    "type": "anytls",
-                    "tag": "anytls-in",
-                    "listen": "::",
-                    "listen_port": ($port | tonumber),
-                    "users": [{"password": $password}],
-                    "padding_scheme": $padding,
-                    "tls": {
-                        "enabled": true,
-                        "server_name": $domain,
-                        "key_path": "/etc/anytls/server.key",
-                        "certificate_path": "/etc/anytls/server.crt"
-                    }
-                }],
-                "outbounds": [{"type": "direct", "tag": "direct"}]
-            }')
-    fi
+    local config=$(jq -n \
+        --arg port "$port" \
+        --arg password "$password" \
+        --arg domain "$domain" \
+        --argjson padding "$padding_scheme" \
+        '{
+            "log": {"level": "info", "timestamp": true},
+            "inbounds": [{
+                "type": "anytls",
+                "tag": "anytls-in",
+                "listen": "::",
+                "listen_port": ($port | tonumber),
+                "users": [{"password": $password}],
+                "padding_scheme": $padding,
+                "tls": {
+                    "enabled": true,
+                    "server_name": $domain,
+                    "key_path": "/etc/anytls/server.key",
+                    "certificate_path": "/etc/anytls/server.crt"
+                }
+            }],
+            "outbounds": [{"type": "direct", "tag": "direct"}]
+        }')
     
     echo "$config" > "$config_file"
     
@@ -93,70 +57,45 @@ create_anytls_config() {
 }
 
 # =========================================
-# 创建 Fallback 伪装页面
+# 填充方案选择
 # =========================================
-create_fallback_page() {
-    mkdir -p /var/www/anytls-fallback
+select_padding_scheme() {
+    echo ""
+    echo -e "${CYAN}选择填充方案:${RESET}"
+    echo -e "${YELLOW}1.${RESET} 默认方案 ${GREEN}(推荐)${RESET}"
+    echo -e "   适合大多数场景，平衡性能和隐蔽性"
+    echo -e "${YELLOW}2.${RESET} 激进方案"
+    echo -e "   更多填充，更强隐蔽性，略影响性能"
+    echo -e "${YELLOW}3.${RESET} 最小方案"
+    echo -e "   最少填充，性能最优，隐蔽性较低"
+    echo ""
     
-    cat > /var/www/anytls-fallback/index.html << 'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-               display: flex; justify-content: center; align-items: center; 
-               height: 100vh; margin: 0; background: #f5f5f5; }
-        .container { text-align: center; padding: 40px; }
-        h1 { color: #333; font-weight: 300; }
-        p { color: #666; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Welcome to our server</h1>
-        <p>This page is under construction.</p>
-    </div>
-</body>
-</html>
-EOF
-}
-
-# =========================================
-# 启动简易 HTTP 服务 (用于 Fallback)
-# =========================================
-setup_fallback_service() {
-    local port=$1
+    read -p "请选择 [1-3] (默认: 1): " padding_choice
+    padding_choice=${padding_choice:-1}
     
-    # 创建伪装页面
-    create_fallback_page
+    case $padding_choice in
+        1)
+            # 默认方案 - 官方推荐
+            PADDING_SCHEME='["stop=8", "0=30-30", "1=100-400", "2=400-500,c,500-1000,c,500-1000,c,500-1000,c,500-1000", "3=9-9,500-1000", "4=500-1000", "5=500-1000", "6=500-1000", "7=500-1000"]'
+            PADDING_NAME="默认"
+            ;;
+        2)
+            # 激进方案 - 更多填充
+            PADDING_SCHEME='["stop=12", "0=50-100", "1=200-600", "2=500-800,c,800-1200,c,800-1200,c,800-1200,c,800-1200,c,800-1200", "3=15-15,600-1200", "4=600-1200", "5=600-1200", "6=600-1200", "7=600-1200", "8=600-1200", "9=600-1200", "10=600-1200", "11=600-1200"]'
+            PADDING_NAME="激进"
+            ;;
+        3)
+            # 最小方案 - 性能优先
+            PADDING_SCHEME='["stop=4", "0=10-20", "1=50-150", "2=100-300", "3=5-5,200-400"]'
+            PADDING_NAME="最小"
+            ;;
+        *)
+            PADDING_SCHEME='["stop=8", "0=30-30", "1=100-400", "2=400-500,c,500-1000,c,500-1000,c,500-1000,c,500-1000", "3=9-9,500-1000", "4=500-1000", "5=500-1000", "6=500-1000", "7=500-1000"]'
+            PADDING_NAME="默认"
+            ;;
+    esac
     
-    # 使用 Python 的简易 HTTP 服务器
-    local default_group=$(get_default_group)
-    
-    cat > /lib/systemd/system/anytls-fallback.service << EOF
-[Unit]
-Description=AnyTLS Fallback HTTP Server
-After=network-online.target
-
-[Service]
-Type=simple
-User=nobody
-Group=${default_group}
-WorkingDirectory=/var/www/anytls-fallback
-ExecStart=/usr/bin/python3 -m http.server ${port} --bind 127.0.0.1
-Restart=always
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    systemctl daemon-reload
-    systemctl enable anytls-fallback
-    systemctl start anytls-fallback
+    echo -e "${GREEN}已选择: ${PADDING_NAME}方案${RESET}"
 }
 
 # =========================================
@@ -209,7 +148,7 @@ install_anytls() {
     # 检查 sing-box 版本 (需要 v1.12.0+)
     download_singbox
     
-    local singbox_version=$(/usr/local/bin/sing-box version 2>/dev/null | grep -oP 'version \K[0-9.]+' | head -1)
+    local singbox_version=$(/usr/local/bin/sing-box version 2>/dev/null | awk '/version/ {print $3}' | head -1)
     if [ -n "$singbox_version" ]; then
         # 简单版本比较 (主版本号.次版本号)
         local major=$(echo "$singbox_version" | cut -d. -f1)
@@ -226,34 +165,13 @@ install_anytls() {
     
     # 端口配置
     while true; do
-        read -p "请输入 AnyTLS 端口 (默认: 8443): " ANYTLS_PORT
-        ANYTLS_PORT=${ANYTLS_PORT:-8443}
+        read -p "请输入 AnyTLS 端口 (默认: 443): " ANYTLS_PORT
+        ANYTLS_PORT=${ANYTLS_PORT:-443}
         validate_port "$ANYTLS_PORT" && break
     done
     
-    # Fallback 配置 (默认启用)
-    echo ""
-    echo -e "${CYAN}Fallback 功能说明:${RESET}"
-    echo -e "${YELLOW}启用后，非代理请求会返回伪装网页，提高抗检测能力${RESET}"
-    read -p "启用 Fallback？(Y/n，默认: Y): " enable_fallback
-    enable_fallback=${enable_fallback:-Y}
-    
-    if [ "$enable_fallback" == "n" ] || [ "$enable_fallback" == "N" ]; then
-        ENABLE_FALLBACK=false
-        FALLBACK_PORT=""
-    else
-        ENABLE_FALLBACK=true
-        FALLBACK_PORT=8080
-        
-        # 检查 Python3 是否可用
-        if ! command -v python3 &>/dev/null; then
-            echo -e "${YELLOW}未检测到 Python3，正在安装...${RESET}"
-            apt-get update && apt-get install -y python3 || yum install -y python3 || {
-                echo -e "${RED}Python3 安装失败，禁用 Fallback${RESET}"
-                ENABLE_FALLBACK=false
-            }
-        fi
-    fi
+    # 填充方案选择
+    select_padding_scheme
     
     # 域名配置
     echo ""
@@ -265,6 +183,7 @@ install_anytls() {
     done
     
     echo -e "${CYAN}域名: ${YELLOW}${ANYTLS_DOMAIN}${RESET}"
+    echo -e "${CYAN}端口: ${YELLOW}${ANYTLS_PORT}${RESET}"
     read -p "确认继续？(y/n): " confirm
     [ "$confirm" != "y" ] && [ "$confirm" != "Y" ] && return
     
@@ -273,14 +192,10 @@ install_anytls() {
     issue_letsencrypt_cert "$ANYTLS_DOMAIN" || return 1
     install_cert_to_anytls "$ANYTLS_DOMAIN" || return 1
     
-    # 启动 Fallback 服务
-    if [ "$ENABLE_FALLBACK" = true ]; then
-        setup_fallback_service "$FALLBACK_PORT"
-    fi
-    
     mkdir -p /etc/anytls
     
-    if ! create_anytls_config "/etc/anytls/config.json" "$ANYTLS_PORT" "$ANYTLS_PASSWORD" "$ANYTLS_DOMAIN" "$ENABLE_FALLBACK" "$FALLBACK_PORT"; then
+    # 创建配置，使用选择的填充方案
+    if ! create_anytls_config "/etc/anytls/config.json" "$ANYTLS_PORT" "$ANYTLS_PASSWORD" "$ANYTLS_DOMAIN" "$PADDING_SCHEME"; then
         echo -e "${RED}配置文件创建失败${RESET}"
         return 1
     fi
@@ -288,6 +203,7 @@ install_anytls() {
     id -u anytls &>/dev/null || useradd -r -s /usr/sbin/nologin anytls
     
     local default_group=$(get_default_group)
+    
     cat <<EOF > /lib/systemd/system/anytls.service
 [Unit]
 Description=AnyTLS Service
@@ -324,8 +240,7 @@ ANYTLS_PORT=$ANYTLS_PORT
 ANYTLS_PASSWORD=$ANYTLS_PASSWORD
 ANYTLS_DOMAIN=$ANYTLS_DOMAIN
 CERT_TYPE=letsencrypt
-ENABLE_FALLBACK=$ENABLE_FALLBACK
-FALLBACK_PORT=$FALLBACK_PORT
+PADDING_NAME=$PADDING_NAME
 EOF
     
     # 设置配置文件权限
@@ -340,7 +255,7 @@ EOF
     echo -e "${CYAN}域名: ${YELLOW}${ANYTLS_DOMAIN}${RESET}"
     echo -e "${CYAN}端口: ${YELLOW}${ANYTLS_PORT}${RESET}"
     echo -e "${CYAN}密码: ${YELLOW}${ANYTLS_PASSWORD}${RESET}"
-    [ "$ENABLE_FALLBACK" = true ] && echo -e "${CYAN}Fallback: ${GREEN}已启用${RESET}"
+    echo -e "${CYAN}填充方案: ${YELLOW}${PADDING_NAME}${RESET}"
     echo ""
     echo -e "${CYAN}Surge 配置:${RESET}"
     echo -e "${GREEN}Proxy = anytls, ${ANYTLS_DOMAIN}, ${ANYTLS_PORT}, password=${ANYTLS_PASSWORD}, sni=${ANYTLS_DOMAIN}${RESET}"
@@ -363,17 +278,13 @@ uninstall_anytls() {
     # 停止服务
     systemctl stop anytls 2>/dev/null
     systemctl disable anytls 2>/dev/null
-    systemctl stop anytls-fallback 2>/dev/null
-    systemctl disable anytls-fallback 2>/dev/null
     
     # 删除服务文件
     rm -f /lib/systemd/system/anytls.service
-    rm -f /lib/systemd/system/anytls-fallback.service
     
     # 删除配置和证书
     rm -rf /etc/anytls
     rm -f /etc/anytls-proxy-config.txt
-    rm -rf /var/www/anytls-fallback
     
     # 删除用户
     id -u anytls &>/dev/null && userdel anytls 2>/dev/null
@@ -391,11 +302,6 @@ view_anytls_config() {
     
     safe_source_config /etc/anytls-proxy-config.txt
     local status=$(systemctl is-active anytls 2>/dev/null || echo "未运行")
-    local fallback_status=""
-    
-    if [ "$ENABLE_FALLBACK" = "true" ]; then
-        fallback_status=$(systemctl is-active anytls-fallback 2>/dev/null || echo "未运行")
-    fi
     
     echo ""
     echo -e "${GREEN}=========================================${RESET}"
@@ -405,7 +311,7 @@ view_anytls_config() {
     echo -e "${CYAN}域名: ${YELLOW}${ANYTLS_DOMAIN}${RESET}"
     echo -e "${CYAN}状态: ${YELLOW}${status}${RESET}"
     echo -e "${CYAN}端口: ${YELLOW}${ANYTLS_PORT}${RESET}"
-    [ "$ENABLE_FALLBACK" = "true" ] && echo -e "${CYAN}Fallback: ${GREEN}已启用${RESET} (状态: ${fallback_status})"
+    [ -n "$PADDING_NAME" ] && echo -e "${CYAN}填充方案: ${YELLOW}${PADDING_NAME}${RESET}"
     echo ""
     echo -e "${CYAN}Surge 配置:${RESET}"
     echo -e "${GREEN}Proxy = anytls, ${ANYTLS_DOMAIN}, ${ANYTLS_PORT}, password=${ANYTLS_PASSWORD}, sni=${ANYTLS_DOMAIN}${RESET}"
