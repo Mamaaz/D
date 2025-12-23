@@ -19,7 +19,7 @@ GITHUB_REPO="D"
 BRANCH="main"
 SUBDIR="P/proxy_manager"
 INSTALL_DIR="/opt/proxy-manager"
-RAW_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${BRANCH}/${SUBDIR}"
+RAW_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${BRANCH}/${SUBDIR}"
 
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${RESET}"
 echo -e "${CYAN}║${RESET}       ${GREEN}Proxy Manager 在线安装${RESET}                              ${CYAN}║${RESET}"
