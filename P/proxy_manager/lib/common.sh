@@ -42,7 +42,7 @@ MAX_LOG_SIZE=$((10 * 1024 * 1024))  # 10MB
 # 版本常量
 # =========================================
 DEFAULT_SNELL_VERSION="5.0.1"
-DEFAULT_SINGBOX_VERSION="v1.10.0"
+DEFAULT_SINGBOX_VERSION="v1.12.0"
 DEFAULT_SHADOW_TLS_VERSION="v0.2.25"
 DEFAULT_HYSTERIA2_VERSION="v2.6.1"
 
@@ -285,6 +285,27 @@ get_latest_version() {
 }
 
 # =========================================
+# 版本比较函数
+# =========================================
+# 比较两个版本号，返回: 0=相等, 1=v1>v2, 2=v1<v2
+compare_versions() {
+    local v1="${1#v}"
+    local v2="${2#v}"
+    
+    if [ "$v1" = "$v2" ]; then
+        return 0
+    fi
+    
+    # 使用 sort -V 进行版本排序
+    local higher=$(printf '%s\n%s' "$v1" "$v2" | sort -V | tail -n1)
+    if [ "$higher" = "$v1" ]; then
+        return 1  # v1 > v2
+    else
+        return 2  # v1 < v2
+    fi
+}
+
+# =========================================
 # 版本检查与更新提示
 # =========================================
 declare -A VERSION_UPDATE_CACHE
@@ -298,9 +319,12 @@ check_version_updates() {
     if [ -f /etc/snell-proxy-config.txt ]; then
         local current=$(grep "^SNELL_VERSION=" /etc/snell-proxy-config.txt 2>/dev/null | cut -d'=' -f2)
         local latest=$(get_latest_version "" "snell" "$DEFAULT_SNELL_VERSION")
-        if [ -n "$current" ] && [ -n "$latest" ] && [ "$current" != "$latest" ]; then
-            VERSION_UPDATE_CACHE["snell"]="$current -> $latest"
-            has_update=true
+        if [ -n "$current" ] && [ -n "$latest" ]; then
+            compare_versions "$latest" "$current"
+            if [ $? -eq 1 ]; then  # latest > current
+                VERSION_UPDATE_CACHE["snell"]="$current -> $latest"
+                has_update=true
+            fi
         fi
     fi
     
@@ -308,9 +332,12 @@ check_version_updates() {
     if [ -f /etc/snell-proxy-config.txt ]; then
         local current=$(grep "^SHADOW_TLS_VERSION=" /etc/snell-proxy-config.txt 2>/dev/null | cut -d'=' -f2)
         local latest=$(get_latest_version "" "shadow-tls" "$DEFAULT_SHADOW_TLS_VERSION")
-        if [ -n "$current" ] && [ -n "$latest" ] && [ "$current" != "$latest" ]; then
-            VERSION_UPDATE_CACHE["shadow-tls"]="$current -> $latest"
-            has_update=true
+        if [ -n "$current" ] && [ -n "$latest" ]; then
+            compare_versions "$latest" "$current"
+            if [ $? -eq 1 ]; then  # latest > current
+                VERSION_UPDATE_CACHE["shadow-tls"]="$current -> $latest"
+                has_update=true
+            fi
         fi
     fi
     
@@ -324,9 +351,12 @@ check_version_updates() {
             fi
         done
         local latest=$(get_latest_version "" "sing-box" "$DEFAULT_SINGBOX_VERSION")
-        if [ -n "$current" ] && [ -n "$latest" ] && [ "$current" != "$latest" ]; then
-            VERSION_UPDATE_CACHE["sing-box"]="$current -> $latest"
-            has_update=true
+        if [ -n "$current" ] && [ -n "$latest" ]; then
+            compare_versions "$latest" "$current"
+            if [ $? -eq 1 ]; then  # latest > current
+                VERSION_UPDATE_CACHE["sing-box"]="$current -> $latest"
+                has_update=true
+            fi
         fi
     fi
     
