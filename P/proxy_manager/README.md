@@ -1,6 +1,6 @@
 # Proxy Manager
 
-多协议代理服务器一键管理脚本，支持 Snell、SS-2022、VLESS Reality、Hysteria2，以及高级分流管理。
+多协议代理服务器一键管理脚本，支持 Snell、SS-2022、VLESS Reality、Hysteria2、AnyTLS，以及高级分流管理。
 
 ## 🚀 一键安装
 
@@ -17,6 +17,7 @@ bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager/
 | SS-2022 + Shadow-TLS | 最新 Shadowsocks 协议 |
 | VLESS Reality | Xray 核心协议，抗检测 |
 | Hysteria2 | 基于 QUIC 的高速协议 |
+| AnyTLS | 抗 TLS 指纹检测协议 ⭐ 新增 |
 
 ### 🌐 高级分流管理 (v3.3 新增)
 
@@ -53,20 +54,20 @@ proxy-manager --help       # 显示帮助
 
 ```
 安装服务
-  1-4. Snell / Sing-box / Reality / Hysteria2
+  1-5. Snell / Sing-box / Reality / Hysteria2 / AnyTLS
 
 管理服务
-  5-8. 配置 / 日志 / 更新 / 卸载
+  6-9. 配置 / 日志 / 更新 / 卸载
 
 证书管理
-  9-10. 续签 / 查看证书
+  10-11. 续签 / 查看证书
 
-分流管理 ⭐ 新增
-  11. 高级分流管理 (落地代理/规则/订阅)
+分流管理 ⭐
+  12. 高级分流管理 (落地代理/规则/订阅)
 
 系统管理
-  12. 更新 Proxy Manager
-  13. 完全卸载 Proxy Manager
+  13. 更新 Proxy Manager
+  14. 完全卸载 Proxy Manager
 ```
 
 ## 🌐 分流管理详情
@@ -116,6 +117,7 @@ proxy-manager --help       # 显示帮助
     ├── singbox.sh             # Sing-box 服务
     ├── reality.sh             # VLESS Reality
     ├── hysteria2.sh           # Hysteria2 服务
+    ├── anytls.sh              # AnyTLS 服务 ⭐
     ├── cert.sh                # 证书管理
     └── routing-menu.sh        # 分流管理菜单 ⭐
 
@@ -130,6 +132,16 @@ proxy-manager --help       # 显示帮助
 ```
 
 ## 🔄 更新日志
+
+### v3.5
+- 🔧 移除 AnyTLS Nginx Fallback 功能（Nginx TLS 终止会破坏 AnyTLS 抗指纹能力）
+- 🔧 AnyTLS 默认端口改为 443（直接暴露以保留完整 TLS 指纹特征）
+- 🐛 修复 grep -oP 在部分系统上的兼容性问题
+
+### v3.4
+- ✨ 新增 AnyTLS 协议支持（抗 TLS 指纹检测）
+- ✨ AnyTLS 自动 Let's Encrypt 证书申请
+- 🔧 Snell Shadow-TLS 默认端口改为 8444
 
 ### v3.3
 - ✨ 新增高级分流管理模块
