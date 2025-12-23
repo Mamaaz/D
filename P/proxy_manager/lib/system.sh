@@ -254,8 +254,8 @@ get_all_service_status() {
         return
     fi
     
-    local services=("snell" "shadow-tls-snell" "sing-box" "sing-box-reality" "hysteria2")
-    local installed_services=$(systemctl list-unit-files 2>/dev/null | grep -E "^(snell|shadow-tls-snell|sing-box|sing-box-reality|hysteria2)\.service" | awk '{print $1}' | sed 's/\.service$//')
+    local services=("snell" "shadow-tls-snell" "sing-box" "sing-box-reality" "hysteria2" "anytls")
+    local installed_services=$(systemctl list-unit-files 2>/dev/null | grep -E "^(snell|shadow-tls-snell|sing-box|sing-box-reality|hysteria2|anytls)\.service" | awk '{print $1}' | sed 's/\.service$//')
     
     for service in "${services[@]}"; do
         if echo "$installed_services" | grep -q "^${service}$"; then
