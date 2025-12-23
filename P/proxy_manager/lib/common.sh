@@ -314,10 +314,10 @@ check_version_updates() {
         fi
     fi
     
-    # 检查 Sing-box
-    if [ -f /etc/singbox-proxy-config.txt ] || [ -f /etc/reality-proxy-config.txt ] || [ -f /etc/hysteria2-proxy-config.txt ]; then
+    # 检查 Sing-box (包括 AnyTLS)
+    if [ -f /etc/singbox-proxy-config.txt ] || [ -f /etc/reality-proxy-config.txt ] || [ -f /etc/hysteria2-proxy-config.txt ] || [ -f /etc/anytls-proxy-config.txt ]; then
         local current=""
-        for cfg in /etc/singbox-proxy-config.txt /etc/reality-proxy-config.txt /etc/hysteria2-proxy-config.txt; do
+        for cfg in /etc/singbox-proxy-config.txt /etc/reality-proxy-config.txt /etc/hysteria2-proxy-config.txt /etc/anytls-proxy-config.txt; do
             if [ -f "$cfg" ]; then
                 current=$(grep "^SINGBOX_VERSION=" "$cfg" 2>/dev/null | cut -d'=' -f2)
                 [ -n "$current" ] && break
