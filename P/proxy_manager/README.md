@@ -76,6 +76,8 @@ proxy-manager --help       # 显示帮助
 - **Shadowsocks** - SS-2022 加密，高兼容性
 - **Hysteria2** - QUIC 协议，高速低延迟
 - **VLESS** - 支持 Reality，抗检测能力强
+- **HTTP** - 支持 ISP 静态代理 ⭐ 新增
+- **SOCKS5** - 支持 ISP 静态代理 ⭐ 新增
 
 ### 规则集订阅 (Loyalsoldier)
 | 规则集 | 用途 |
@@ -132,6 +134,15 @@ proxy-manager --help       # 显示帮助
 ```
 
 ## 🔄 更新日志
+
+### v3.6
+- ✨ 新增 HTTP 代理落地支持（支持 ISP 静态代理）
+- ✨ 新增 SOCKS5 代理落地支持（支持用户名密码认证）
+- ✨ 新增编辑代理功能（快速修改 IP/端口/密码）
+- ✨ 分流配置支持直接应用到入口服务（自动合并 inbounds）
+- ✨ HTTP 代理支持 TLS 加密选项
+- ✨ SOCKS 代理支持 UDP over TCP 选项
+- 🔧 修复 DNS 配置顺序问题
 
 ### v3.5
 - 🔧 移除 AnyTLS Nginx Fallback 功能（Nginx TLS 终止会破坏 AnyTLS 抗指纹能力）
