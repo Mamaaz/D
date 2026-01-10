@@ -27,8 +27,7 @@ init_rules_file() {
   "rules": [
     {"priority": 1, "type": "geosite", "value": "category-ads-all", "outbound": "block", "enabled": true},
     {"priority": 2, "type": "geosite", "value": "cn", "outbound": "direct", "enabled": true},
-    {"priority": 3, "type": "geoip", "value": "cn", "outbound": "direct", "enabled": true},
-    {"priority": 4, "type": "geoip", "value": "private", "outbound": "direct", "enabled": true}
+    {"priority": 3, "type": "geoip", "value": "cn", "outbound": "direct", "enabled": true}
   ],
   "final": "auto-select"
 }
