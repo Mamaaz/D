@@ -232,7 +232,7 @@ apply_to_inbound_service() {
     
     # 保存配置
     echo "$new_config" | jq '.' > "$inbound_config"
-    chmod 600 "$inbound_config"
+    chmod 644 "$inbound_config"
     
     echo -e "${GREEN}✓ 配置已应用到入口服务: $inbound_config${RESET}"
     
@@ -331,7 +331,7 @@ generate_standalone_config() {
     # 保存配置
     local config_file="$UNIFIED_CONFIG_DIR/config.json"
     echo "$full_config" | jq '.' > "$config_file"
-    chmod 600 "$config_file"
+    chmod 644 "$config_file"
     
     echo -e "${GREEN}✓ 配置已生成: $config_file${RESET}"
     
