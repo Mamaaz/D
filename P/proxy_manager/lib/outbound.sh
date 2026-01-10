@@ -647,45 +647,41 @@ add_socks_proxy() {
         [[ "$use_uot" =~ ^[Yy]$ ]] && uot_enabled=true
     fi
     
-    # 构建配置
+    # 构建配置 - 只添加必要的字段
     local new_outbound=""
-    if [ -n "$username" ]; then
-        new_outbound=$(jq -n \
-            --arg tag "$tag" \
-            --arg server "$server" \
-            --argjson port "$port" \
-            --arg version "$version" \
-            --arg username "$username" \
-            --arg password "$password" \
-            --argjson uot "$uot_enabled" \
-            '{
-                "tag": $tag,
-                "type": "socks",
-                "server": $server,
-                "server_port": $port,
-                "version": $version,
-                "username": $username,
-                "password": $password,
-                "udp_over_tcp": $uot,
-                "enabled": true
-            }')
-    else
-        new_outbound=$(jq -n \
-            --arg tag "$tag" \
-            --arg server "$server" \
-            --argjson port "$port" \
-            --arg version "$version" \
-            --argjson uot "$uot_enabled" \
-            '{
-                "tag": $tag,
-                "type": "socks",
-                "server": $server,
-                "server_port": $port,
-                "version": $version,
-                "udp_over_tcp": $uot,
-                "enabled": true
-            }')
+    
+    # 基础配置
+    local base_config=$(jq -n \
+        --arg tag "$tag" \
+        --arg server "$server" \
+        --argjson port "$port" \
+        '{
+            "tag": $tag,
+            "type": "socks",
+            "server": $server,
+            "server_port": $port,
+            "enabled": true
+        }')
+    
+    # 添加版本（非默认值时）
+    if [ "$version" != "5" ]; then
+        base_config=$(echo "$base_config" | jq --arg v "$version" '. + {"version": $v}')
     fi
+    
+    # 添加用户名密码
+    if [ -n "$username" ]; then
+        base_config=$(echo "$base_config" | jq \
+            --arg u "$username" \
+            --arg p "$password" \
+            '. + {"username": $u, "password": $p}')
+    fi
+    
+    # 添加 UDP over TCP（仅当启用时）
+    if [ "$uot_enabled" = true ]; then
+        base_config=$(echo "$base_config" | jq '. + {"udp_over_tcp": true}')
+    fi
+    
+    new_outbound="$base_config"
     
     # 添加到配置
     local temp_file=$(mktemp)
