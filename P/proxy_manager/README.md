@@ -1,5 +1,8 @@
 # Proxy Manager
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Shell Script](https://img.shields.io/badge/Shell-Bash-green.svg)](https://www.gnu.org/software/bash/)
+
 多协议代理服务器一键管理脚本，支持 Snell、SS-2022、VLESS Reality、Hysteria2、AnyTLS，以及高级分流管理。
 
 ## 🚀 一键安装
@@ -8,22 +11,31 @@
 bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager/install.sh)
 ```
 
+> 💡 **提示**: 需要 root 权限运行。推荐在全新的 VPS 上安装。
+
+## 📋 系统要求
+
+- **操作系统**: Linux (Debian/Ubuntu/CentOS/RHEL/Arch)
+- **权限**: Root
+- **架构**: x86_64 / arm64 / armv7
+- **依赖**: curl, wget, jq (安装脚本会自动安装)
+
 ## ✨ 功能特性
 
 ### 代理服务管理
-| 协议 | 说明 |
-|------|------|
-| Snell + Shadow-TLS | Surge 专用协议 |
-| SS-2022 + Shadow-TLS | 最新 Shadowsocks 协议 |
-| VLESS Reality | Xray 核心协议，抗检测 |
-| Hysteria2 | 基于 QUIC 的高速协议 |
-| AnyTLS | 抗 TLS 指纹检测协议 ⭐ 新增 |
+| 协议 | 说明 | 客户端支持 |
+|------|------|----------|
+| Snell v5 + Shadow-TLS | Surge 专用协议 | Surge |
+| SS-2022 + Shadow-TLS | 最新 Shadowsocks 协议 | Surge, Clash |
+| VLESS Reality | Xray 核心协议，抗检测 | V2Ray 系客户端 |
+| Hysteria2 | 基于 QUIC 的高速协议 | Surge, Clash |
+| AnyTLS | 抗 TLS 指纹检测协议 ⭐ 新增 | Surge, Clash |
 
-### 🌐 高级分流管理 (v3.3 新增)
+### 🌐 高级分流管理
 
 | 功能 | 说明 |
 |------|------|
-| 落地代理管理 | 支持 SS/Hysteria2/VLESS 落地配置 |
+| 落地代理管理 | 支持 SS/Hysteria2/VLESS/HTTP/SOCKS5 落地配置 |
 | 分流规则 | 灵活的域名/IP/GeoSite 规则配置 |
 | 远程订阅 | 支持 Loyalsoldier 规则集自动更新 |
 | GeoIP/GeoSite | 自动更新地理位置数据库 |
@@ -42,13 +54,26 @@ bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager/
             美国落地     新加坡落地    日本落地
 ```
 
-## 🖥️ 常用命令
+## 🖥️ 快速开始
+
+### 安装完成后
 
 ```bash
-proxy-manager              # 运行管理脚本
-proxy-manager update       # 更新脚本
-proxy-manager --help       # 显示帮助
+# 运行管理脚本
+proxy-manager
+
+# 更新到最新版
+proxy-manager update
+
+# 显示帮助信息
+proxy-manager --help
 ```
+
+### 推荐安装顺序
+
+1. 选择 **1. 安装 Snell + Shadow-TLS** - 作为主要入口协议
+2. 进入 **12. 高级分流管理** - 配置落地代理和规则
+3. 选择 **6. 应用配置** - 生效分流设置
 
 ## 📱 主菜单
 
@@ -94,12 +119,6 @@ proxy-manager --help       # 显示帮助
 - GeoSite: [SagerNet/sing-geosite](https://github.com/SagerNet/sing-geosite)
 - 支持定时自动更新 (systemd timer)
 
-## 📦 系统要求
-
-- Linux (Debian/Ubuntu/CentOS/RHEL)
-- Root 权限
-- x86_64 / arm64 / armv7
-
 ## 📁 目录结构
 
 ```
@@ -142,6 +161,7 @@ proxy-manager --help       # 显示帮助
 - ✨ 分流配置支持直接应用到入口服务（自动合并 inbounds）
 - ✨ HTTP 代理支持 TLS 加密选项
 - ✨ SOCKS 代理支持 UDP over TCP 选项
+- ✨ Snell 更新至 v5 版本支持
 - 🔧 修复 DNS 配置顺序问题
 
 ### v3.5
@@ -169,6 +189,43 @@ proxy-manager --help       # 显示帮助
 ### v3.0
 - 🎉 模块化重构
 - ✨ 支持多协议管理
+
+## ❓ 常见问题
+
+<details>
+<summary><b>安装失败怎么办？</b></summary>
+
+1. 确保使用 root 用户运行
+2. 检查网络连接是否正常
+3. 尝试重新运行安装命令
+
+</details>
+
+<details>
+<summary><b>如何更新到最新版本？</b></summary>
+
+```bash
+proxy-manager update
+# 或者重新运行安装命令
+bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager/install.sh)
+```
+
+</details>
+
+<details>
+<summary><b>服务启动失败？</b></summary>
+
+查看服务日志：
+```bash
+journalctl -u snell -n 50 --no-pager
+journalctl -u sing-box -n 50 --no-pager
+```
+
+</details>
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
 
 ## 📄 License
 

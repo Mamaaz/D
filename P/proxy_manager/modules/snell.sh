@@ -210,7 +210,7 @@ EOF
     echo -e "${CYAN}伪装域名: ${YELLOW}${SNELL_TLS_DOMAIN}${RESET}"
     echo ""
     echo -e "${CYAN}Surge 配置:${RESET}"
-    echo -e "${GREEN}Proxy = snell, ${SERVER_IP}, ${SNELL_SHADOW_TLS_PORT}, psk=${SNELL_PSK}, version=4, reuse=true, tfo=true, shadow-tls-password=${SNELL_SHADOW_TLS_PASSWORD}, shadow-tls-sni=${SNELL_TLS_DOMAIN}, shadow-tls-version=3${RESET}"
+    echo -e "${GREEN}Proxy = snell, ${SERVER_IP}, ${SNELL_SHADOW_TLS_PORT}, psk=${SNELL_PSK}, version=5, reuse=true, tfo=true, shadow-tls-password=${SNELL_SHADOW_TLS_PASSWORD}, shadow-tls-sni=${SNELL_TLS_DOMAIN}, shadow-tls-version=3${RESET}"
     echo ""
 }
 
@@ -265,7 +265,7 @@ view_snell_config() {
     echo -e "${CYAN}Shadow-TLS 状态: ${YELLOW}${shadow_status}${RESET}"
     echo ""
     echo -e "${CYAN}Surge 配置:${RESET}"
-    echo -e "${GREEN}Proxy = snell, ${SERVER_IP}, ${SHADOW_TLS_PORT}, psk=${SNELL_PSK}, version=4, shadow-tls-password=${SHADOW_TLS_PASSWORD}, shadow-tls-sni=${TLS_DOMAIN}, shadow-tls-version=3${RESET}"
+    echo -e "${GREEN}Proxy = snell, ${SERVER_IP}, ${SHADOW_TLS_PORT}, psk=${SNELL_PSK}, version=5, shadow-tls-password=${SHADOW_TLS_PASSWORD}, shadow-tls-sni=${TLS_DOMAIN}, shadow-tls-version=3${RESET}"
     echo ""
 }
 
