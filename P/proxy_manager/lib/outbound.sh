@@ -745,6 +745,139 @@ remove_outbound() {
 }
 
 # =========================================
+# 编辑落地代理
+# =========================================
+edit_outbound() {
+    init_outbounds_file
+    list_outbounds
+    
+    echo ""
+    read -p "请输入要编辑的代理标签: " tag
+    [ -z "$tag" ] && return 0
+    
+    # 检查是否为内置出口
+    if [[ "$tag" == "direct" || "$tag" == "block" ]]; then
+        echo -e "${RED}不能编辑内置出口: $tag${RESET}"
+        return 1
+    fi
+    
+    # 查找代理
+    local outbound=$(jq --arg t "$tag" '.outbounds[] | select(.tag == $t)' "$OUTBOUNDS_FILE")
+    if [ -z "$outbound" ] || [ "$outbound" = "null" ]; then
+        echo -e "${RED}代理不存在: $tag${RESET}"
+        return 1
+    fi
+    
+    local type=$(echo "$outbound" | jq -r '.type')
+    local server=$(echo "$outbound" | jq -r '.server // ""')
+    local port=$(echo "$outbound" | jq -r '.server_port // ""')
+    local username=$(echo "$outbound" | jq -r '.username // ""')
+    local password=$(echo "$outbound" | jq -r '.password // ""')
+    
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════${RESET}"
+    echo -e "${CYAN}   编辑代理: $tag ($type)${RESET}"
+    echo -e "${CYAN}═══════════════════════════════════════${RESET}"
+    echo ""
+    echo -e "${YELLOW}当前配置:${RESET}"
+    echo -e "  服务器: ${CYAN}$server${RESET}"
+    echo -e "  端口: ${CYAN}$port${RESET}"
+    [ -n "$username" ] && echo -e "  用户名: ${CYAN}$username${RESET}"
+    [ -n "$password" ] && echo -e "  密码: ${CYAN}$password${RESET}"
+    echo ""
+    echo -e "${YELLOW}选择要修改的项目:${RESET}"
+    echo -e "  1. 服务器地址"
+    echo -e "  2. 端口"
+    echo -e "  3. 用户名"
+    echo -e "  4. 密码"
+    echo -e "  5. 修改所有"
+    echo -e "  0. 取消"
+    echo ""
+    read -p "请选择 [0-5]: " edit_choice
+    
+    local new_server="$server"
+    local new_port="$port"
+    local new_username="$username"
+    local new_password="$password"
+    
+    case $edit_choice in
+        1)
+            read -p "新服务器地址 [$server]: " input
+            new_server=${input:-$server}
+            ;;
+        2)
+            read -p "新端口 [$port]: " input
+            new_port=${input:-$port}
+            ;;
+        3)
+            read -p "新用户名 [$username]: " input
+            new_username=${input:-$username}
+            ;;
+        4)
+            read -p "新密码: " input
+            [ -n "$input" ] && new_password="$input"
+            ;;
+        5)
+            read -p "新服务器地址 [$server]: " input
+            new_server=${input:-$server}
+            read -p "新端口 [$port]: " input
+            new_port=${input:-$port}
+            read -p "新用户名 [$username]: " input
+            new_username=${input:-$username}
+            read -p "新密码 (留空保持不变): " input
+            [ -n "$input" ] && new_password="$input"
+            ;;
+        0)
+            return 0
+            ;;
+        *)
+            echo -e "${RED}无效选择${RESET}"
+            return 1
+            ;;
+    esac
+    
+    # 更新配置
+    local temp_file=$(mktemp)
+    
+    # 根据类型更新不同字段
+    if [ "$type" = "socks" ] || [ "$type" = "http" ]; then
+        if [ -n "$new_username" ]; then
+            jq --arg t "$tag" \
+               --arg s "$new_server" \
+               --argjson p "$new_port" \
+               --arg u "$new_username" \
+               --arg pw "$new_password" \
+               '.outbounds = [.outbounds[] | if .tag == $t then . + {"server": $s, "server_port": $p, "username": $u, "password": $pw} else . end]' \
+               "$OUTBOUNDS_FILE" > "$temp_file"
+        else
+            jq --arg t "$tag" \
+               --arg s "$new_server" \
+               --argjson p "$new_port" \
+               '.outbounds = [.outbounds[] | if .tag == $t then . + {"server": $s, "server_port": $p} else . end]' \
+               "$OUTBOUNDS_FILE" > "$temp_file"
+        fi
+    else
+        # SS/Hysteria2/VLESS
+        jq --arg t "$tag" \
+           --arg s "$new_server" \
+           --argjson p "$new_port" \
+           --arg pw "$new_password" \
+           '.outbounds = [.outbounds[] | if .tag == $t then . + {"server": $s, "server_port": $p, "password": $pw} else . end]' \
+           "$OUTBOUNDS_FILE" > "$temp_file"
+    fi
+    
+    mv "$temp_file" "$OUTBOUNDS_FILE"
+    chmod 600 "$OUTBOUNDS_FILE"
+    
+    echo ""
+    echo -e "${GREEN}✓ 代理已更新: $tag${RESET}"
+    echo -e "  服务器: ${CYAN}$new_server:$new_port${RESET}"
+    [ -n "$new_username" ] && echo -e "  用户名: ${CYAN}$new_username${RESET}"
+    echo ""
+    echo -e "${YELLOW}提示: 请重新应用配置使更改生效${RESET}"
+}
+
+# =========================================
 # 切换代理启用状态
 # =========================================
 toggle_outbound() {
@@ -973,17 +1106,18 @@ outbound_menu() {
         echo -e "${CYAN}║${RESET}   ${YELLOW}4.${RESET} 添加 VLESS 代理                                                    ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}   ${YELLOW}5.${RESET} 添加 HTTP 代理 ${GREEN}(ISP代理)${RESET}                                       ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}   ${YELLOW}6.${RESET} 添加 SOCKS5 代理 ${GREEN}(ISP代理)${RESET}                                     ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}7.${RESET} 删除代理                                                           ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}8.${RESET} 启用/禁用代理                                                      ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}9.${RESET} 测试代理连接                                                       ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}10.${RESET} 管理自动选择组                                                    ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}7.${RESET} 编辑代理 ${GREEN}(修改IP/端口/密码)${RESET}                                    ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}8.${RESET} 删除代理                                                           ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}9.${RESET} 启用/禁用代理                                                      ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}10.${RESET} 测试代理连接                                                      ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}11.${RESET} 管理自动选择组                                                    ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}                                                                           ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}   ${YELLOW}0.${RESET} 返回上级菜单                                                       ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}                                                                           ${CYAN}║${RESET}"
         echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${RESET}"
         echo ""
         
-        read -p "请选择 [0-10]: " choice
+        read -p "请选择 [0-11]: " choice
         
         case $choice in
             1) list_outbounds ;;
@@ -992,10 +1126,11 @@ outbound_menu() {
             4) add_vless ;;
             5) add_http_proxy ;;
             6) add_socks_proxy ;;
-            7) remove_outbound ;;
-            8) toggle_outbound ;;
-            9) test_outbound ;;
-            10) manage_auto_select ;;
+            7) edit_outbound ;;
+            8) remove_outbound ;;
+            9) toggle_outbound ;;
+            10) test_outbound ;;
+            11) manage_auto_select ;;
             0) return 0 ;;
             *) echo -e "${RED}无效选择${RESET}" ;;
         esac
