@@ -74,6 +74,8 @@ list_outbounds() {
             shadowsocks) type_icon="🔷 SS" ;;
             hysteria2) type_icon="🚀 Hy2" ;;
             vless) type_icon="⚡ VLESS" ;;
+            http) type_icon="🌐 HTTP" ;;
+            socks) type_icon="🧦 SOCKS" ;;
             *) type_icon="📍 $type" ;;
         esac
         
@@ -431,6 +433,283 @@ add_vless() {
 }
 
 # =========================================
+# 添加 HTTP 代理
+# =========================================
+add_http_proxy() {
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════${RESET}"
+    echo -e "${CYAN}   添加 HTTP 落地代理${RESET}"
+    echo -e "${CYAN}═══════════════════════════════════════${RESET}"
+    echo ""
+    
+    # 标签
+    read -p "代理标签 (如 isp-us): " tag
+    [ -z "$tag" ] && { echo -e "${RED}标签不能为空${RESET}"; return 1; }
+    
+    # 检查标签是否已存在
+    local exists=$(jq --arg t "$tag" '.outbounds | map(select(.tag == $t)) | length' "$OUTBOUNDS_FILE")
+    if [ "$exists" -gt 0 ]; then
+        echo -e "${RED}标签已存在: $tag${RESET}"
+        return 1
+    fi
+    
+    # 服务器地址
+    read -p "服务器地址 (IP或域名): " server
+    [ -z "$server" ] && { echo -e "${RED}服务器地址不能为空${RESET}"; return 1; }
+    
+    # 端口
+    read -p "HTTP 端口: " port
+    [ -z "$port" ] && { echo -e "${RED}端口不能为空${RESET}"; return 1; }
+    
+    # 用户名
+    read -p "用户名 (可留空): " username
+    
+    # 密码
+    local password=""
+    if [ -n "$username" ]; then
+        read -p "密码: " password
+        [ -z "$password" ] && { echo -e "${RED}已设置用户名，密码不能为空${RESET}"; return 1; }
+    fi
+    
+    # 是否使用 TLS
+    read -p "是否使用 TLS? (y/n, 默认: n): " use_tls
+    local tls_enabled=false
+    local tls_config=""
+    if [[ "$use_tls" =~ ^[Yy]$ ]]; then
+        tls_enabled=true
+        read -p "TLS SNI (留空使用服务器地址): " sni
+        sni=${sni:-$server}
+        
+        read -p "跳过证书验证? (y/n, 默认: n): " insecure
+        local insecure_bool=false
+        [[ "$insecure" =~ ^[Yy]$ ]] && insecure_bool=true
+        
+        tls_config=$(jq -n \
+            --arg sni "$sni" \
+            --argjson insecure "$insecure_bool" \
+            '{
+                "enabled": true,
+                "server_name": $sni,
+                "insecure": $insecure
+            }')
+    fi
+    
+    # 构建配置
+    local new_outbound=""
+    if [ -n "$username" ]; then
+        if [ "$tls_enabled" = true ]; then
+            new_outbound=$(jq -n \
+                --arg tag "$tag" \
+                --arg server "$server" \
+                --argjson port "$port" \
+                --arg username "$username" \
+                --arg password "$password" \
+                --argjson tls "$tls_config" \
+                '{
+                    "tag": $tag,
+                    "type": "http",
+                    "server": $server,
+                    "server_port": $port,
+                    "username": $username,
+                    "password": $password,
+                    "tls": $tls,
+                    "enabled": true
+                }')
+        else
+            new_outbound=$(jq -n \
+                --arg tag "$tag" \
+                --arg server "$server" \
+                --argjson port "$port" \
+                --arg username "$username" \
+                --arg password "$password" \
+                '{
+                    "tag": $tag,
+                    "type": "http",
+                    "server": $server,
+                    "server_port": $port,
+                    "username": $username,
+                    "password": $password,
+                    "enabled": true
+                }')
+        fi
+    else
+        if [ "$tls_enabled" = true ]; then
+            new_outbound=$(jq -n \
+                --arg tag "$tag" \
+                --arg server "$server" \
+                --argjson port "$port" \
+                --argjson tls "$tls_config" \
+                '{
+                    "tag": $tag,
+                    "type": "http",
+                    "server": $server,
+                    "server_port": $port,
+                    "tls": $tls,
+                    "enabled": true
+                }')
+        else
+            new_outbound=$(jq -n \
+                --arg tag "$tag" \
+                --arg server "$server" \
+                --argjson port "$port" \
+                '{
+                    "tag": $tag,
+                    "type": "http",
+                    "server": $server,
+                    "server_port": $port,
+                    "enabled": true
+                }')
+        fi
+    fi
+    
+    # 添加到配置
+    local temp_file=$(mktemp)
+    jq --argjson new "$new_outbound" '.outbounds += [$new]' "$OUTBOUNDS_FILE" > "$temp_file" && mv "$temp_file" "$OUTBOUNDS_FILE"
+    chmod 600 "$OUTBOUNDS_FILE"
+    
+    # 询问是否添加到自动选择组
+    read -p "是否添加到自动选择组? (y/n): " add_to_auto
+    if [[ "$add_to_auto" =~ ^[Yy]$ ]]; then
+        temp_file=$(mktemp)
+        jq --arg tag "$tag" '.auto_select.outbounds += [$tag]' "$OUTBOUNDS_FILE" > "$temp_file" && mv "$temp_file" "$OUTBOUNDS_FILE"
+        chmod 600 "$OUTBOUNDS_FILE"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}✓ HTTP 代理添加成功${RESET}"
+    echo -e "  标签: ${CYAN}$tag${RESET}"
+    echo -e "  服务器: ${CYAN}$server:$port${RESET}"
+    [ -n "$username" ] && echo -e "  认证: ${CYAN}是${RESET}"
+    [ "$tls_enabled" = true ] && echo -e "  TLS: ${CYAN}启用${RESET}"
+    echo ""
+}
+
+# =========================================
+# 添加 SOCKS5 代理
+# =========================================
+add_socks_proxy() {
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════${RESET}"
+    echo -e "${CYAN}   添加 SOCKS5 落地代理${RESET}"
+    echo -e "${CYAN}═══════════════════════════════════════${RESET}"
+    echo ""
+    
+    # 标签
+    read -p "代理标签 (如 isp-sg): " tag
+    [ -z "$tag" ] && { echo -e "${RED}标签不能为空${RESET}"; return 1; }
+    
+    # 检查标签是否已存在
+    local exists=$(jq --arg t "$tag" '.outbounds | map(select(.tag == $t)) | length' "$OUTBOUNDS_FILE")
+    if [ "$exists" -gt 0 ]; then
+        echo -e "${RED}标签已存在: $tag${RESET}"
+        return 1
+    fi
+    
+    # 服务器地址
+    read -p "服务器地址 (IP或域名): " server
+    [ -z "$server" ] && { echo -e "${RED}服务器地址不能为空${RESET}"; return 1; }
+    
+    # 端口
+    read -p "SOCKS5 端口: " port
+    [ -z "$port" ] && { echo -e "${RED}端口不能为空${RESET}"; return 1; }
+    
+    # SOCKS 版本
+    echo ""
+    echo -e "${YELLOW}选择 SOCKS 版本:${RESET}"
+    echo -e "  1. SOCKS5 ${GREEN}(推荐)${RESET}"
+    echo -e "  2. SOCKS4a"
+    echo -e "  3. SOCKS4"
+    echo ""
+    read -p "请选择 [1-3] (默认: 1): " version_choice
+    
+    local version="5"
+    case ${version_choice:-1} in
+        1) version="5" ;;
+        2) version="4a" ;;
+        3) version="4" ;;
+        *) version="5" ;;
+    esac
+    
+    # 用户名
+    read -p "用户名 (可留空): " username
+    
+    # 密码
+    local password=""
+    if [ -n "$username" ]; then
+        read -p "密码: " password
+        [ -z "$password" ] && { echo -e "${RED}已设置用户名，密码不能为空${RESET}"; return 1; }
+    fi
+    
+    # UDP over TCP (仅 SOCKS5)
+    local uot_enabled=false
+    if [ "$version" = "5" ]; then
+        read -p "启用 UDP over TCP? (y/n, 默认: n): " use_uot
+        [[ "$use_uot" =~ ^[Yy]$ ]] && uot_enabled=true
+    fi
+    
+    # 构建配置
+    local new_outbound=""
+    if [ -n "$username" ]; then
+        new_outbound=$(jq -n \
+            --arg tag "$tag" \
+            --arg server "$server" \
+            --argjson port "$port" \
+            --arg version "$version" \
+            --arg username "$username" \
+            --arg password "$password" \
+            --argjson uot "$uot_enabled" \
+            '{
+                "tag": $tag,
+                "type": "socks",
+                "server": $server,
+                "server_port": $port,
+                "version": $version,
+                "username": $username,
+                "password": $password,
+                "udp_over_tcp": $uot,
+                "enabled": true
+            }')
+    else
+        new_outbound=$(jq -n \
+            --arg tag "$tag" \
+            --arg server "$server" \
+            --argjson port "$port" \
+            --arg version "$version" \
+            --argjson uot "$uot_enabled" \
+            '{
+                "tag": $tag,
+                "type": "socks",
+                "server": $server,
+                "server_port": $port,
+                "version": $version,
+                "udp_over_tcp": $uot,
+                "enabled": true
+            }')
+    fi
+    
+    # 添加到配置
+    local temp_file=$(mktemp)
+    jq --argjson new "$new_outbound" '.outbounds += [$new]' "$OUTBOUNDS_FILE" > "$temp_file" && mv "$temp_file" "$OUTBOUNDS_FILE"
+    chmod 600 "$OUTBOUNDS_FILE"
+    
+    # 询问是否添加到自动选择组
+    read -p "是否添加到自动选择组? (y/n): " add_to_auto
+    if [[ "$add_to_auto" =~ ^[Yy]$ ]]; then
+        temp_file=$(mktemp)
+        jq --arg tag "$tag" '.auto_select.outbounds += [$tag]' "$OUTBOUNDS_FILE" > "$temp_file" && mv "$temp_file" "$OUTBOUNDS_FILE"
+        chmod 600 "$OUTBOUNDS_FILE"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}✓ SOCKS$version 代理添加成功${RESET}"
+    echo -e "  标签: ${CYAN}$tag${RESET}"
+    echo -e "  服务器: ${CYAN}$server:$port${RESET}"
+    [ -n "$username" ] && echo -e "  认证: ${CYAN}是${RESET}"
+    [ "$uot_enabled" = true ] && echo -e "  UDP over TCP: ${CYAN}启用${RESET}"
+    echo ""
+}
+
+# =========================================
 # 删除落地代理
 # =========================================
 remove_outbound() {
@@ -696,27 +975,31 @@ outbound_menu() {
         echo -e "${CYAN}║${RESET}   ${YELLOW}2.${RESET} 添加 Shadowsocks 代理                                              ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}   ${YELLOW}3.${RESET} 添加 Hysteria2 代理                                                ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}   ${YELLOW}4.${RESET} 添加 VLESS 代理                                                    ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}5.${RESET} 删除代理                                                           ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}6.${RESET} 启用/禁用代理                                                      ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}7.${RESET} 测试代理连接                                                       ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}8.${RESET} 管理自动选择组                                                     ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}5.${RESET} 添加 HTTP 代理 ${GREEN}(ISP代理)${RESET}                                       ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}6.${RESET} 添加 SOCKS5 代理 ${GREEN}(ISP代理)${RESET}                                     ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}7.${RESET} 删除代理                                                           ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}8.${RESET} 启用/禁用代理                                                      ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}9.${RESET} 测试代理连接                                                       ${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET}   ${YELLOW}10.${RESET} 管理自动选择组                                                    ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}                                                                           ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}   ${YELLOW}0.${RESET} 返回上级菜单                                                       ${CYAN}║${RESET}"
         echo -e "${CYAN}║${RESET}                                                                           ${CYAN}║${RESET}"
         echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${RESET}"
         echo ""
         
-        read -p "请选择 [0-8]: " choice
+        read -p "请选择 [0-10]: " choice
         
         case $choice in
             1) list_outbounds ;;
             2) add_shadowsocks ;;
             3) add_hysteria2 ;;
             4) add_vless ;;
-            5) remove_outbound ;;
-            6) toggle_outbound ;;
-            7) test_outbound ;;
-            8) manage_auto_select ;;
+            5) add_http_proxy ;;
+            6) add_socks_proxy ;;
+            7) remove_outbound ;;
+            8) toggle_outbound ;;
+            9) test_outbound ;;
+            10) manage_auto_select ;;
             0) return 0 ;;
             *) echo -e "${RED}无效选择${RESET}" ;;
         esac
