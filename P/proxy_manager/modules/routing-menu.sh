@@ -73,6 +73,15 @@ apply_routing_config() {
         return 1
     fi
     
+    # 选择应用模式
+    echo -e "${YELLOW}选择应用模式:${RESET}"
+    echo -e "  1. 应用到入口服务 (推荐，直接生效)"
+    echo -e "  2. 仅生成独立配置文件"
+    echo ""
+    read -p "请选择 [1-2] (默认: 1): " apply_mode
+    apply_mode=${apply_mode:-1}
+    
+    echo ""
     echo -e "${CYAN}正在生成配置...${RESET}"
     
     # 生成 outbounds
@@ -154,6 +163,124 @@ apply_routing_config() {
     if [ -f "$UNIFIED_CONFIG_DIR/rules.json" ]; then
         final=$(jq -r '.final // "direct"' "$UNIFIED_CONFIG_DIR/rules.json" 2>/dev/null)
     fi
+    
+    if [ "$apply_mode" = "1" ]; then
+        # 模式1: 应用到入口服务
+        apply_to_inbound_service "$outbounds" "$rule_sets" "$route_rules" "$final"
+    else
+        # 模式2: 生成独立配置文件
+        generate_standalone_config "$outbounds" "$rule_sets" "$route_rules" "$final"
+    fi
+}
+
+# =========================================
+# 应用配置到入口服务 (sing-box)
+# =========================================
+apply_to_inbound_service() {
+    local outbounds="$1"
+    local rule_sets="$2"
+    local route_rules="$3"
+    local final="$4"
+    
+    local inbound_config="/etc/sing-box/config.json"
+    
+    # 检查入口配置是否存在
+    if [ ! -f "$inbound_config" ]; then
+        echo -e "${YELLOW}未找到入口服务配置: $inbound_config${RESET}"
+        echo -e "${YELLOW}将生成独立配置文件${RESET}"
+        generate_standalone_config "$outbounds" "$rule_sets" "$route_rules" "$final"
+        return
+    fi
+    
+    # 备份原配置
+    cp "$inbound_config" "${inbound_config}.bak.$(date +%Y%m%d%H%M%S)"
+    
+    # 读取原有 inbounds 和 log 配置
+    local original_inbounds=$(jq '.inbounds // []' "$inbound_config")
+    local original_log=$(jq '.log // {"level": "info", "timestamp": true}' "$inbound_config")
+    
+    # 构建路由配置
+    local route_config=""
+    if [ "$(echo "$rule_sets" | jq 'length')" -gt 0 ] || [ "$(echo "$route_rules" | jq 'length')" -gt 0 ]; then
+        route_config=$(jq -n \
+            --argjson rule_sets "$rule_sets" \
+            --argjson rules "$route_rules" \
+            --arg final "$final" \
+            '{
+                "rule_set": $rule_sets,
+                "rules": $rules,
+                "final": $final,
+                "auto_detect_interface": true
+            }')
+    else
+        # 仅设置 final
+        route_config=$(jq -n --arg final "$final" '{"final": $final, "auto_detect_interface": true}')
+    fi
+    
+    # 生成新配置
+    local new_config=$(jq -n \
+        --argjson log "$original_log" \
+        --argjson inbounds "$original_inbounds" \
+        --argjson outbounds "$outbounds" \
+        --argjson route "$route_config" \
+        '{
+            "log": $log,
+            "inbounds": $inbounds,
+            "outbounds": $outbounds,
+            "route": $route
+        }')
+    
+    # 保存配置
+    echo "$new_config" | jq '.' > "$inbound_config"
+    chmod 600 "$inbound_config"
+    
+    echo -e "${GREEN}✓ 配置已应用到入口服务: $inbound_config${RESET}"
+    
+    # 同时保存到分流配置目录
+    echo "$new_config" | jq '.' > "$UNIFIED_CONFIG_DIR/config.json"
+    
+    # 验证配置
+    if command -v sing-box &>/dev/null; then
+        echo ""
+        echo -e "${CYAN}正在验证配置...${RESET}"
+        if sing-box check -c "$inbound_config" 2>/dev/null; then
+            echo -e "${GREEN}✓ 配置验证通过${RESET}"
+        else
+            echo -e "${RED}✗ 配置验证失败${RESET}"
+            echo -e "${YELLOW}正在恢复备份...${RESET}"
+            local latest_backup=$(ls -t ${inbound_config}.bak.* 2>/dev/null | head -1)
+            if [ -n "$latest_backup" ]; then
+                cp "$latest_backup" "$inbound_config"
+                echo -e "${YELLOW}已恢复备份: $latest_backup${RESET}"
+            fi
+            return 1
+        fi
+    fi
+    
+    # 询问是否重载服务
+    echo ""
+    read -p "是否重载 sing-box 服务? (y/n): " reload
+    if [[ "$reload" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo -e "${CYAN}正在重载 sing-box 服务...${RESET}"
+        if systemctl restart sing-box 2>/dev/null; then
+            echo -e "${GREEN}✓ sing-box 已重载${RESET}"
+        else
+            echo -e "${RED}✗ sing-box 重载失败${RESET}"
+        fi
+    fi
+    
+    echo ""
+}
+
+# =========================================
+# 生成独立配置文件
+# =========================================
+generate_standalone_config() {
+    local outbounds="$1"
+    local rule_sets="$2"
+    local route_rules="$3"
+    local final="$4"
     
     # 生成完整配置 (sing-box 1.12+ 兼容格式)
     local full_config=$(jq -n \
