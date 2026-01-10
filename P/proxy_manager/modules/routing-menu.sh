@@ -169,15 +169,15 @@ apply_routing_config() {
             "dns": {
                 "servers": [
                     {
+                        "tag": "local",
+                        "address": "223.5.5.5",
+                        "detour": "direct"
+                    },
+                    {
                         "tag": "google",
                         "address": "https://8.8.8.8/dns-query",
                         "address_resolver": "local",
                         "strategy": "prefer_ipv4"
-                    },
-                    {
-                        "tag": "local",
-                        "address": "223.5.5.5",
-                        "detour": "direct"
                     }
                 ],
                 "rules": [
