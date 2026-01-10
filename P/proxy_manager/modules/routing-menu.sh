@@ -67,6 +67,18 @@ apply_routing_config() {
     echo -e "${CYAN}═══════════════════════════════════════${RESET}"
     echo ""
     
+    # 初始化 rules.json 文件（如果不存在）
+    if [ ! -f "$UNIFIED_CONFIG_DIR/rules.json" ]; then
+        mkdir -p "$UNIFIED_CONFIG_DIR"
+        cat > "$UNIFIED_CONFIG_DIR/rules.json" <<'EOF'
+{
+  "rules": [],
+  "final": "auto-select"
+}
+EOF
+        chmod 644 "$UNIFIED_CONFIG_DIR/rules.json"
+    fi
+    
     # 检查是否有配置
     if [ ! -f "$UNIFIED_CONFIG_DIR/outbounds.json" ] && [ ! -f "$UNIFIED_CONFIG_DIR/rules.json" ]; then
         echo -e "${YELLOW}未找到分流配置，请先配置落地代理和规则${RESET}"
