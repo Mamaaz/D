@@ -127,7 +127,7 @@ add_rule() {
     local hint=""
     case $rule_type in
         geosite) hint="输入 geosite 规则名 (如: netflix, openai, cn, category-ads):" ;;
-        geoip) hint="输入 geoip 规则名 (如: cn, us, private):" ;;
+        geoip) hint="输入 geoip 规则名 (如: cn, us, jp, hk, sg, tw):" ;;
         domain) hint="输入精确域名 (如: example.com):" ;;
         domain_suffix) hint="输入域名后缀 (如: .netflix.com):" ;;
         ip_cidr) hint="输入 IP 段 (如: 10.0.0.0/8):" ;;
