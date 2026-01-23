@@ -1060,7 +1060,6 @@ generate_outbounds_config() {
     local outbounds_count=$(jq '.outbounds | length' "$OUTBOUNDS_FILE")
     
     for ((i=0; i<outbounds_count; i++)); do
-        local enabled=$(jq -r ".outbounds[$i].enabled // true" "$OUTBOUNDS_FILE")
         local type=$(jq -r ".outbounds[$i].type" "$OUTBOUNDS_FILE")
         
         # 内置出口始终包含
@@ -1070,8 +1069,10 @@ generate_outbounds_config() {
             continue
         fi
         
-        # 跳过禁用的代理
-        [ "$enabled" != "true" ] && continue
+        # 检查是否禁用 - 使用 jq 直接判断布尔值
+        # enabled 为 false 时跳过，为 true 或不存在(null)时包含
+        local is_disabled=$(jq -r ".outbounds[$i].enabled == false" "$OUTBOUNDS_FILE")
+        [ "$is_disabled" = "true" ] && continue
         
         # 移除 enabled 字段并添加到输出
         local outbound=$(jq ".outbounds[$i] | del(.enabled)" "$OUTBOUNDS_FILE")
