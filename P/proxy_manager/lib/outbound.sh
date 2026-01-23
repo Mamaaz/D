@@ -742,6 +742,45 @@ remove_outbound() {
     chmod 600 "$OUTBOUNDS_FILE"
     
     echo -e "${GREEN}✓ 代理已删除: $tag${RESET}"
+    
+    # 自动更新引用该代理的规则和 final 设置
+    _cleanup_outbound_references "$tag"
+}
+
+# =========================================
+# 清理代理引用（删除或禁用时调用）
+# =========================================
+_cleanup_outbound_references() {
+    local tag="$1"
+    local rules_file="$UNIFIED_CONFIG_DIR/rules.json"
+    local updated=false
+    
+    # 检查并更新 rules.json
+    if [ -f "$rules_file" ]; then
+        # 检查 final 是否引用该代理
+        local current_final=$(jq -r '.final // "direct"' "$rules_file" 2>/dev/null)
+        if [ "$current_final" = "$tag" ]; then
+            local temp_file=$(mktemp)
+            jq '.final = "direct"' "$rules_file" > "$temp_file" && mv "$temp_file" "$rules_file"
+            chmod 600 "$rules_file"
+            echo -e "${YELLOW}⚠ 默认出口 (final) 已从 $tag 更新为 direct${RESET}"
+            updated=true
+        fi
+        
+        # 检查规则中是否引用该代理
+        local rules_using=$(jq --arg t "$tag" '[.rules[] | select(.outbound == $t)] | length' "$rules_file" 2>/dev/null || echo 0)
+        if [ "$rules_using" -gt 0 ]; then
+            local temp_file=$(mktemp)
+            jq --arg t "$tag" '.rules = [.rules[] | if .outbound == $t then .outbound = "direct" else . end]' "$rules_file" > "$temp_file" && mv "$temp_file" "$rules_file"
+            chmod 600 "$rules_file"
+            echo -e "${YELLOW}⚠ 已将 $rules_using 条规则的出口从 $tag 更新为 direct${RESET}"
+            updated=true
+        fi
+    fi
+    
+    if [ "$updated" = true ]; then
+        echo -e "${YELLOW}提示: 请重新应用配置使更改生效${RESET}"
+    fi
 }
 
 # =========================================
@@ -895,10 +934,13 @@ toggle_outbound() {
         return 1
     fi
     
+    # 获取当前状态
+    local current_state=$(jq -r --arg t "$tag" '.outbounds[] | select(.tag == $t) | .enabled // true' "$OUTBOUNDS_FILE")
+    
     # 切换状态
     local temp_file=$(mktemp)
     jq --arg t "$tag" '
-        .outbounds = [.outbounds[] | if .tag == $t then .enabled = (.enabled | not) else . end]
+        .outbounds = [.outbounds[] | if .tag == $t then .enabled = (if .enabled == false then true else false end) else . end]
     ' "$OUTBOUNDS_FILE" > "$temp_file" && mv "$temp_file" "$OUTBOUNDS_FILE"
     
     chmod 600 "$OUTBOUNDS_FILE"
@@ -908,6 +950,8 @@ toggle_outbound() {
         echo -e "${GREEN}✓ 代理已启用: $tag${RESET}"
     else
         echo -e "${YELLOW}✓ 代理已禁用: $tag${RESET}"
+        # 禁用时自动清理引用
+        _cleanup_outbound_references "$tag"
     fi
 }
 
