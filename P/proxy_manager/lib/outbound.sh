@@ -753,9 +753,11 @@ remove_outbound() {
 _cleanup_outbound_references() {
     local tag="$1"
     local rules_file="$UNIFIED_CONFIG_DIR/rules.json"
+    local singbox_config="/etc/sing-box/config.json"
+    local unified_config="$UNIFIED_CONFIG_DIR/config.json"
     local updated=false
     
-    # 检查并更新 rules.json
+    # 1. 检查并更新 rules.json
     if [ -f "$rules_file" ]; then
         # 检查 final 是否引用该代理
         local current_final=$(jq -r '.final // "direct"' "$rules_file" 2>/dev/null)
@@ -778,8 +780,32 @@ _cleanup_outbound_references() {
         fi
     fi
     
-    if [ "$updated" = true ]; then
-        echo -e "${YELLOW}提示: 请重新应用配置使更改生效${RESET}"
+    # 2. 直接更新 /etc/sing-box/config.json（如果存在）
+    if [ -f "$singbox_config" ]; then
+        if grep -q "\"$tag\"" "$singbox_config" 2>/dev/null; then
+            sed -i "s/\"$tag\"/\"direct\"/g" "$singbox_config"
+            echo -e "${GREEN}✓ 已更新 sing-box 配置: $singbox_config${RESET}"
+            updated=true
+            
+            # 询问是否重载服务
+            echo ""
+            read -p "是否立即重载 sing-box 服务? (y/n): " reload_choice
+            if [[ "$reload_choice" =~ ^[Yy]$ ]]; then
+                if systemctl restart sing-box 2>/dev/null; then
+                    echo -e "${GREEN}✓ sing-box 已重载${RESET}"
+                else
+                    echo -e "${RED}✗ sing-box 重载失败${RESET}"
+                fi
+            fi
+        fi
+    fi
+    
+    # 3. 更新统一配置文件（如果存在）
+    if [ -f "$unified_config" ]; then
+        if grep -q "\"$tag\"" "$unified_config" 2>/dev/null; then
+            sed -i "s/\"$tag\"/\"direct\"/g" "$unified_config"
+            echo -e "${GREEN}✓ 已更新统一配置: $unified_config${RESET}"
+        fi
     fi
 }
 
