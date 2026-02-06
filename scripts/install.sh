@@ -145,7 +145,8 @@ get_latest_version() {
 # 获取当前安装版本
 get_installed_version() {
     if [ -f "${INSTALL_DIR}/${BINARY_NAME}" ]; then
-        "${INSTALL_DIR}/${BINARY_NAME}" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo ""
+        # 使用 timeout 防止卡住，只获取版本号
+        timeout 3 "${INSTALL_DIR}/${BINARY_NAME}" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo ""
     else
         echo ""
     fi
