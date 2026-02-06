@@ -1,0 +1,146 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 4.0.0)'
+        required: true
+        default: '4.0.0'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          cd P/proxy_manager_go
+          go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o ../../proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/proxy-manager/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            cp "${dir}${name}" "release/${name}"
+            chmod +x "release/${name}"
+          done
+          ls -la release/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Proxy Manager v${{ steps.version.outputs.VERSION }}
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            release/proxy-manager-linux-amd64
+            release/proxy-manager-linux-arm64
+            release/checksums.txt
+          body: |
+            ## Proxy Manager v${{ steps.version.outputs.VERSION }}
+
+            多协议代理服务器一键管理工具 (Go 版本)
+
+            ### 一键安装
+
+            ```bash
+            bash <(curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/P/proxy_manager_go/scripts/install.sh)
+            ```
+
+            ### 下载
+
+            | 平台 | 架构 | 下载 |
+            |------|------|------|
+            | Linux | amd64 | [proxy-manager-linux-amd64](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/proxy-manager-linux-amd64) |
+            | Linux | arm64 | [proxy-manager-linux-arm64](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/proxy-manager-linux-arm64) |
+
+            ### 支持的协议
+
+            - Snell + Shadow-TLS
+            - SS-2022 + Shadow-TLS
+            - VLESS Reality
+            - Hysteria2
+            - AnyTLS
+
+            ### 更新日志
+
+            - 完整 Go 重写
+            - 现代 TUI 界面
+            - 健康检查和自动重启
+            - 一键安装脚本
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
