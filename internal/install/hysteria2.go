@@ -1,41 +1,43 @@
 package install
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
 // =========================================
-// Hysteria2 安装
+// Hysteria2 安装 (使用 sing-box 内核)
 // =========================================
 
 const (
-	Hysteria2BinaryPath      = "/usr/local/bin/hysteria"
 	Hysteria2ConfigDir       = "/etc/hysteria2"
-	Hysteria2ConfigPath      = "/etc/hysteria2/config.yaml"
+	Hysteria2ConfigPath      = "/etc/hysteria2/config.json"
 	Hysteria2ProxyConfigPath = "/etc/hysteria2-proxy-config.txt"
-	Hysteria2CertDir         = "/etc/hysteria2/certs"
+	Hysteria2CertPath        = "/etc/hysteria2/server.crt"
+	Hysteria2KeyPath         = "/etc/hysteria2/server.key"
 )
 
 // Hysteria2Config Hysteria2 配置
 type Hysteria2Config struct {
-	ServerIP  string
-	IPVersion string
-	Port      int
-	Password  string
-	Domain    string
-	Email     string
-	Version   string
-	UpMbps    int
-	DownMbps  int
+	ServerIP     string
+	IPVersion    string
+	Port         int
+	Password     string
+	Domain       string
+	EnableObfs   bool
+	ObfsPassword string
+	SingboxVer   string
 }
 
-// InstallHysteria2 安装 Hysteria2
+// InstallHysteria2 安装 Hysteria2 (使用 sing-box 内核)
 func InstallHysteria2() (*InstallResult, error) {
-	utils.PrintInfo("开始安装 Hysteria2...")
+	utils.PrintInfo("开始安装 Hysteria2 (sing-box 内核)...")
 
 	// 检查是否已安装
 	if utils.FileExists(Hysteria2ProxyConfigPath) {
@@ -63,45 +65,74 @@ func InstallHysteria2() (*InstallResult, error) {
 		return nil, err
 	}
 
-	// 获取版本
-	version := utils.GetLatestVersion("apernet/hysteria", utils.DefaultHysteria2Version)
-	utils.PrintInfo("Hysteria2 版本: %s", version)
+	// 获取 sing-box 版本
+	singboxVersion := utils.GetLatestVersion("SagerNet/sing-box", utils.DefaultSingboxVersion)
+	utils.PrintInfo("Sing-box 版本: %s", singboxVersion)
 
-	// 下载 Hysteria2
-	if err := downloadHysteria2(version, arch); err != nil {
-		return nil, fmt.Errorf("下载 Hysteria2 失败: %v", err)
+	// 下载 sing-box
+	if err := downloadSingbox(singboxVersion, arch); err != nil {
+		return nil, fmt.Errorf("下载 sing-box 失败: %v", err)
 	}
 
 	// 获取配置参数
-	port := promptPort("请输入 Hysteria2 监听端口", 443)
+	port := promptPort("请输入 Hysteria2 端口", 443)
 
-	// 获取域名和邮箱 (用于 Let's Encrypt)
+	// 混淆配置
+	enableObfs := false
+	obfsPassword := ""
+	fmt.Println()
+	if utils.PromptConfirm("是否启用混淆？(增强隐蔽性，略影响性能)") {
+		enableObfs = true
+		obfsPassword = utils.GeneratePassword(16)
+		utils.PrintSuccess("混淆密码: %s", obfsPassword)
+	}
+
+	// 获取域名
 	fmt.Println()
 	utils.PrintInfo("Hysteria2 需要域名来申请 Let's Encrypt 证书")
+	utils.PrintWarn("请确保域名已解析到此服务器")
 	domain := utils.PromptInput("请输入域名", "")
 	if domain == "" {
 		return nil, fmt.Errorf("域名不能为空")
 	}
-	email := utils.PromptInput("请输入邮箱 (用于 Let's Encrypt)", "admin@"+domain)
 
+	// 生成密码
 	password := utils.GeneratePassword(16)
 
 	config := Hysteria2Config{
-		ServerIP:  serverIP,
-		IPVersion: ipVersion,
-		Port:      port,
-		Password:  password,
-		Domain:    domain,
-		Email:     email,
-		Version:   version,
-		UpMbps:    100,
-		DownMbps:  100,
+		ServerIP:     serverIP,
+		IPVersion:    ipVersion,
+		Port:         port,
+		Password:     password,
+		Domain:       domain,
+		EnableObfs:   enableObfs,
+		ObfsPassword: obfsPassword,
+		SingboxVer:   singboxVersion,
 	}
 
-	// 创建配置
-	if err := createHysteria2Config(config); err != nil {
+	// 安装 acme.sh 并申请证书
+	utils.PrintInfo("安装 acme.sh 并申请证书...")
+	if err := installAcmeAndCert(domain); err != nil {
+		return nil, fmt.Errorf("证书申请失败: %v", err)
+	}
+
+	// 创建配置目录
+	if err := os.MkdirAll(Hysteria2ConfigDir, 0755); err != nil {
+		return nil, err
+	}
+
+	// 安装证书到 hysteria2 目录
+	if err := installCertToHysteria2(domain); err != nil {
+		return nil, fmt.Errorf("证书安装失败: %v", err)
+	}
+
+	// 创建 sing-box 配置
+	if err := createHysteria2SingboxConfig(config); err != nil {
 		return nil, fmt.Errorf("创建配置失败: %v", err)
 	}
+
+	// 创建系统用户
+	utils.CreateSystemUser("hysteria2")
 
 	// 创建 systemd 服务
 	if err := createHysteria2Service(); err != nil {
@@ -114,17 +145,14 @@ func InstallHysteria2() (*InstallResult, error) {
 
 	// 验证服务
 	if !utils.VerifyServiceStarted("hysteria2", 15) {
-		utils.PrintWarn("Hysteria2 服务启动较慢，可能正在申请证书...")
+		utils.PrintWarn("Hysteria2 服务启动可能需要一些时间...")
 	}
 
 	// 保存配置
 	saveHysteria2Config(config)
 
 	// 生成客户端配置
-	surgeProxy := fmt.Sprintf(
-		"Hysteria2 = hysteria2, %s, %d, password=%s, sni=%s, download-bandwidth=100",
-		domain, port, password, domain,
-	)
+	surgeProxy := generateHysteria2SurgeProxy(config)
 
 	result := &InstallResult{
 		Success:    true,
@@ -139,89 +167,155 @@ func InstallHysteria2() (*InstallResult, error) {
 	return result, nil
 }
 
-func downloadHysteria2(version, arch string) error {
-	if utils.FileExists(Hysteria2BinaryPath) {
-		return nil
-	}
+// installCertToHysteria2 安装证书到 Hysteria2 目录
+func installCertToHysteria2(domain string) error {
+	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
+	defaultGroup := utils.GetDefaultGroup()
 
-	url := fmt.Sprintf(
-		"https://github.com/apernet/hysteria/releases/download/app/%s/hysteria-linux-%s",
-		version, arch,
-	)
+	cmd := exec.Command(acmePath, "--install-cert", "-d", domain, "--ecc",
+		"--key-file", Hysteria2KeyPath,
+		"--fullchain-file", Hysteria2CertPath,
+		"--reloadcmd", fmt.Sprintf("chown hysteria2:%s %s %s && chmod 600 %s && systemctl restart hysteria2 2>/dev/null || true",
+			defaultGroup, Hysteria2KeyPath, Hysteria2CertPath, Hysteria2KeyPath))
 
-	if err := utils.DownloadFile(url, Hysteria2BinaryPath, 3); err != nil {
+	if err := cmd.Run(); err != nil {
 		return err
 	}
 
-	os.Chmod(Hysteria2BinaryPath, 0755)
-	utils.PrintSuccess("Hysteria2 下载成功")
+	os.Chmod(Hysteria2KeyPath, 0600)
+	os.Chmod(Hysteria2CertPath, 0644)
+
+	utils.PrintSuccess("证书安装成功")
 	return nil
 }
 
-func createHysteria2Config(cfg Hysteria2Config) error {
-	if err := os.MkdirAll(Hysteria2ConfigDir, 0755); err != nil {
+// createHysteria2SingboxConfig 创建 sing-box 配置
+func createHysteria2SingboxConfig(cfg Hysteria2Config) error {
+	inbound := map[string]interface{}{
+		"type":        "hysteria2",
+		"tag":         "hy2-in",
+		"listen":      "::",
+		"listen_port": cfg.Port,
+		"users": []map[string]interface{}{
+			{"name": "user1", "password": cfg.Password},
+		},
+		"tls": map[string]interface{}{
+			"enabled":          true,
+			"server_name":      cfg.Domain,
+			"key_path":         Hysteria2KeyPath,
+			"certificate_path": Hysteria2CertPath,
+		},
+	}
+
+	// 添加混淆配置
+	if cfg.EnableObfs {
+		inbound["obfs"] = map[string]interface{}{
+			"type":     "salamander",
+			"password": cfg.ObfsPassword,
+		}
+	}
+
+	config := map[string]interface{}{
+		"log": map[string]interface{}{
+			"level":     "info",
+			"timestamp": true,
+		},
+		"inbounds": []map[string]interface{}{inbound},
+		"outbounds": []map[string]interface{}{
+			{"type": "direct", "tag": "direct"},
+		},
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(Hysteria2CertDir, 0755); err != nil {
+
+	if err := utils.WriteFile(Hysteria2ConfigPath, string(data), 0600); err != nil {
 		return err
 	}
 
-	content := fmt.Sprintf(`listen: :%d
+	// 验证配置
+	cmd := exec.Command(SingboxBinaryPath, "check", "-c", Hysteria2ConfigPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("配置验证失败: %s", string(output))
+	}
 
-acme:
-  domains:
-    - %s
-  email: %s
-
-auth:
-  type: password
-  password: %s
-
-masquerade:
-  type: proxy
-  proxy:
-    url: https://news.ycombinator.com/
-    rewriteHost: true
-`, cfg.Port, cfg.Domain, cfg.Email, cfg.Password)
-
-	return utils.WriteFile(Hysteria2ConfigPath, content, 0600)
+	utils.PrintSuccess("配置文件创建成功")
+	return nil
 }
 
 func createHysteria2Service() error {
+	defaultGroup := utils.GetDefaultGroup()
 	return CreateSystemdService(SystemdServiceConfig{
 		Name:         "hysteria2",
-		Description:  "Hysteria2 Server",
-		User:         "root",
-		ExecStart:    fmt.Sprintf("%s server -c %s", Hysteria2BinaryPath, Hysteria2ConfigPath),
+		Description:  "Hysteria2 Service (sing-box)",
+		User:         "hysteria2",
+		Group:        defaultGroup,
+		ExecStart:    fmt.Sprintf("%s run -c %s", SingboxBinaryPath, Hysteria2ConfigPath),
 		Capabilities: "CAP_NET_BIND_SERVICE",
 	})
 }
 
 func saveHysteria2Config(cfg Hysteria2Config) {
 	config := map[string]string{
-		"TYPE":       "hysteria2",
-		"SERVER_IP":  cfg.ServerIP,
-		"IP_VERSION": cfg.IPVersion,
-		"VERSION":    cfg.Version,
-		"PORT":       strconv.Itoa(cfg.Port),
-		"PASSWORD":   cfg.Password,
-		"DOMAIN":     cfg.Domain,
-		"EMAIL":      cfg.Email,
+		"TYPE":               "hysteria2",
+		"SERVER_IP":          cfg.ServerIP,
+		"IP_VERSION":         cfg.IPVersion,
+		"SINGBOX_VERSION":    cfg.SingboxVer,
+		"HYSTERIA2_PORT":     strconv.Itoa(cfg.Port),
+		"HYSTERIA2_PASSWORD": cfg.Password,
+		"HYSTERIA2_DOMAIN":   cfg.Domain,
+		"CERT_TYPE":          "letsencrypt",
+		"ENABLE_OBFS":        strconv.FormatBool(cfg.EnableObfs),
+	}
+	if cfg.EnableObfs {
+		config["OBFS_PASSWORD"] = cfg.ObfsPassword
 	}
 	SaveConfigFile(Hysteria2ProxyConfigPath, config)
 }
 
+func generateHysteria2SurgeProxy(cfg Hysteria2Config) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Hysteria2 = hysteria2, %s, %d, password=%s, sni=%s",
+		cfg.Domain, cfg.Port, cfg.Password, cfg.Domain))
+	if cfg.EnableObfs {
+		sb.WriteString(fmt.Sprintf(", obfs=salamander, obfs-password=%s", cfg.ObfsPassword))
+	}
+	return sb.String()
+}
+
+func generateHysteria2ShareLink(cfg Hysteria2Config) string {
+	var link strings.Builder
+	link.WriteString(fmt.Sprintf("hysteria2://%s@%s:%d?sni=%s",
+		cfg.Password, cfg.Domain, cfg.Port, cfg.Domain))
+	if cfg.EnableObfs {
+		link.WriteString(fmt.Sprintf("&obfs=salamander&obfs-password=%s", cfg.ObfsPassword))
+	}
+	link.WriteString(fmt.Sprintf("#Hysteria2-%s", cfg.Domain))
+	return link.String()
+}
+
 func printHysteria2Success(cfg Hysteria2Config, surgeProxy string) {
+	shareLink := generateHysteria2ShareLink(cfg)
+
 	fmt.Println()
 	fmt.Printf("%s=========================================%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s   安装完成！%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s=========================================%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Println()
+	fmt.Printf("%s服务器 IP:%s %s\n", utils.ColorCyan, utils.ColorReset, cfg.ServerIP)
 	fmt.Printf("%s域名:%s %s\n", utils.ColorCyan, utils.ColorReset, cfg.Domain)
 	fmt.Printf("%s端口:%s %d\n", utils.ColorCyan, utils.ColorReset, cfg.Port)
 	fmt.Printf("%s密码:%s %s\n", utils.ColorCyan, utils.ColorReset, cfg.Password)
+	if cfg.EnableObfs {
+		fmt.Printf("%s混淆:%s 已启用 (salamander)\n", utils.ColorCyan, utils.ColorReset)
+		fmt.Printf("%s混淆密码:%s %s\n", utils.ColorCyan, utils.ColorReset, cfg.ObfsPassword)
+	}
+	fmt.Printf("%sSing-box 版本:%s %s\n", utils.ColorCyan, utils.ColorReset, cfg.SingboxVer)
 	fmt.Println()
-	fmt.Printf("%s注意:%s 首次启动需要申请 Let's Encrypt 证书，可能需要几分钟\n", utils.ColorYellow, utils.ColorReset)
+	fmt.Printf("%s分享链接:%s\n", utils.ColorCyan, utils.ColorReset)
+	fmt.Printf("%s%s%s\n", utils.ColorGreen, shareLink, utils.ColorReset)
 	fmt.Println()
 	fmt.Printf("%sSurge 配置:%s\n", utils.ColorCyan, utils.ColorReset)
 	fmt.Printf("%s%s%s\n", utils.ColorGreen, surgeProxy, utils.ColorReset)
@@ -245,29 +339,54 @@ func ViewHysteria2Config() {
 		return
 	}
 
+	enableObfs := config["ENABLE_OBFS"] == "true"
+
 	fmt.Println()
 	fmt.Printf("%s=========================================%s\n", utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s   Hysteria2 配置%s\n", utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s   Hysteria2 配置 (sing-box 内核)%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s=========================================%s\n", utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s域名:%s %s\n", utils.ColorCyan, utils.ColorReset, config["DOMAIN"])
-	fmt.Printf("%s端口:%s %s\n", utils.ColorCyan, utils.ColorReset, config["PORT"])
-	fmt.Printf("%s密码:%s %s\n", utils.ColorCyan, utils.ColorReset, config["PASSWORD"])
+	fmt.Printf("%s服务器 IP:%s %s\n", utils.ColorCyan, utils.ColorReset, config["SERVER_IP"])
+	fmt.Printf("%s域名:%s %s\n", utils.ColorCyan, utils.ColorReset, config["HYSTERIA2_DOMAIN"])
+	fmt.Printf("%s端口:%s %s\n", utils.ColorCyan, utils.ColorReset, config["HYSTERIA2_PORT"])
+	if enableObfs {
+		fmt.Printf("%s混淆:%s 已启用\n", utils.ColorCyan, utils.ColorReset)
+	}
+	fmt.Printf("%sSing-box 版本:%s %s\n", utils.ColorCyan, utils.ColorReset, config["SINGBOX_VERSION"])
 	fmt.Println()
 
-	surgeProxy := fmt.Sprintf(
-		"Hysteria2 = hysteria2, %s, %s, password=%s, sni=%s, download-bandwidth=100",
-		config["DOMAIN"], config["PORT"], config["PASSWORD"], config["DOMAIN"],
-	)
+	// 生成分享链接
+	var shareLink strings.Builder
+	shareLink.WriteString(fmt.Sprintf("hysteria2://%s@%s:%s?sni=%s",
+		config["HYSTERIA2_PASSWORD"], config["HYSTERIA2_DOMAIN"],
+		config["HYSTERIA2_PORT"], config["HYSTERIA2_DOMAIN"]))
+	if enableObfs {
+		shareLink.WriteString(fmt.Sprintf("&obfs=salamander&obfs-password=%s", config["OBFS_PASSWORD"]))
+	}
+	shareLink.WriteString("#Hysteria2")
+
+	fmt.Printf("%s分享链接:%s\n", utils.ColorCyan, utils.ColorReset)
+	fmt.Printf("%s%s%s\n", utils.ColorGreen, shareLink.String(), utils.ColorReset)
+	fmt.Println()
+
+	// Surge 配置
+	var surgeProxy strings.Builder
+	surgeProxy.WriteString(fmt.Sprintf("Hysteria2 = hysteria2, %s, %s, password=%s, sni=%s",
+		config["HYSTERIA2_DOMAIN"], config["HYSTERIA2_PORT"],
+		config["HYSTERIA2_PASSWORD"], config["HYSTERIA2_DOMAIN"]))
+	if enableObfs {
+		surgeProxy.WriteString(fmt.Sprintf(", obfs=salamander, obfs-password=%s", config["OBFS_PASSWORD"]))
+	}
+
 	fmt.Printf("%sSurge:%s\n", utils.ColorCyan, utils.ColorReset)
-	fmt.Printf("%s%s%s\n", utils.ColorGreen, surgeProxy, utils.ColorReset)
+	fmt.Printf("%s%s%s\n", utils.ColorGreen, surgeProxy.String(), utils.ColorReset)
 	fmt.Println()
 }
 
 // =========================================
-// Hysteria2 更新
+// Hysteria2 更新 (更新 sing-box 内核)
 // =========================================
 
-// UpdateHysteria2 更新 Hysteria2
+// UpdateHysteria2 更新 Hysteria2 (sing-box 内核)
 func UpdateHysteria2() error {
 	if !utils.FileExists(Hysteria2ProxyConfigPath) {
 		return fmt.Errorf("Hysteria2 未安装")
@@ -278,11 +397,11 @@ func UpdateHysteria2() error {
 		return err
 	}
 
-	currentVersion := config["VERSION"]
-	latestVersion := utils.GetLatestVersion("apernet/hysteria", utils.DefaultHysteria2Version)
+	currentVersion := config["SINGBOX_VERSION"]
+	latestVersion := utils.GetLatestVersion("SagerNet/sing-box", utils.DefaultSingboxVersion)
 
-	fmt.Printf("%s当前版本:%s %s\n", utils.ColorCyan, utils.ColorReset, currentVersion)
-	fmt.Printf("%s最新版本:%s %s\n", utils.ColorCyan, utils.ColorReset, latestVersion)
+	fmt.Printf("%s当前 sing-box 版本:%s %s\n", utils.ColorCyan, utils.ColorReset, currentVersion)
+	fmt.Printf("%s最新 sing-box 版本:%s %s\n", utils.ColorCyan, utils.ColorReset, latestVersion)
 
 	if currentVersion == latestVersion {
 		utils.PrintSuccess("已是最新版本")
@@ -295,23 +414,65 @@ func UpdateHysteria2() error {
 
 	utils.ServiceStop("hysteria2")
 
-	os.Rename(Hysteria2BinaryPath, Hysteria2BinaryPath+".bak")
-	arch, _ := utils.DetectArch()
-	os.Remove(Hysteria2BinaryPath)
+	// 备份旧版本
+	os.Rename(SingboxBinaryPath, SingboxBinaryPath+".bak")
 
-	if err := downloadHysteria2(latestVersion, arch); err != nil {
-		os.Rename(Hysteria2BinaryPath+".bak", Hysteria2BinaryPath)
+	arch, _ := utils.DetectArch()
+	os.Remove(SingboxBinaryPath)
+
+	if err := downloadSingbox(latestVersion, arch); err != nil {
+		os.Rename(SingboxBinaryPath+".bak", SingboxBinaryPath)
 		utils.ServiceStart("hysteria2")
 		return fmt.Errorf("更新失败: %v", err)
 	}
 
-	config["VERSION"] = latestVersion
+	config["SINGBOX_VERSION"] = latestVersion
 	SaveConfigFile(Hysteria2ProxyConfigPath, config)
 
 	utils.ServiceStart("hysteria2")
 
-	os.Remove(Hysteria2BinaryPath + ".bak")
+	os.Remove(SingboxBinaryPath + ".bak")
 	utils.PrintSuccess("更新成功: %s -> %s", currentVersion, latestVersion)
+	return nil
+}
+
+// =========================================
+// Hysteria2 续签证书
+// =========================================
+
+// RenewHysteria2Cert 续签 Hysteria2 证书
+func RenewHysteria2Cert() error {
+	if !utils.FileExists(Hysteria2ProxyConfigPath) {
+		return fmt.Errorf("Hysteria2 未安装")
+	}
+
+	config, err := ParseConfigFile(Hysteria2ProxyConfigPath)
+	if err != nil {
+		return err
+	}
+
+	domain := config["HYSTERIA2_DOMAIN"]
+	if domain == "" {
+		return fmt.Errorf("未找到域名配置")
+	}
+
+	utils.PrintInfo("正在续签证书: %s", domain)
+
+	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
+	cmd := exec.Command(acmePath, "--renew", "-d", domain, "--ecc", "--force")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("证书续签失败: %v", err)
+	}
+
+	if err := installCertToHysteria2(domain); err != nil {
+		return err
+	}
+
+	utils.ServiceRestart("hysteria2")
+	utils.PrintSuccess("证书续签成功")
 	return nil
 }
 
@@ -323,11 +484,26 @@ func UpdateHysteria2() error {
 func UninstallHysteria2() error {
 	utils.PrintInfo("正在卸载 Hysteria2...")
 
+	// 读取配置以获取域名
+	if utils.FileExists(Hysteria2ProxyConfigPath) {
+		config, _ := ParseConfigFile(Hysteria2ProxyConfigPath)
+		domain := config["HYSTERIA2_DOMAIN"]
+		certType := config["CERT_TYPE"]
+
+		if certType == "letsencrypt" && domain != "" {
+			if utils.PromptConfirm("是否删除证书？") {
+				acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
+				exec.Command(acmePath, "--remove", "-d", domain, "--ecc").Run()
+			}
+		}
+	}
+
 	RemoveSystemdService("hysteria2")
 
-	os.Remove(Hysteria2BinaryPath)
 	os.RemoveAll(Hysteria2ConfigDir)
 	os.Remove(Hysteria2ProxyConfigPath)
+
+	utils.DeleteSystemUser("hysteria2")
 
 	utils.PrintSuccess("Hysteria2 已卸载")
 	return nil
