@@ -1,7 +1,7 @@
 #!/bin/bash
 # =========================================
 # Proxy Manager (Go) - 在线安装脚本
-# 一行命令安装: bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager_go/install.sh)
+# 一行命令安装: bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
 # =========================================
 
 set -e
@@ -17,8 +17,7 @@ LOG_DIR="/var/log/proxy-manager"
 GITHUB_USER="Mamaaz"
 GITHUB_REPO="D"
 BRANCH="main"
-SUBDIR="P/proxy_manager_go"
-RAW_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${BRANCH}/${SUBDIR}"
+RAW_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${BRANCH}"
 RELEASE_URL="https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/latest/download"
 
 # 颜色定义
