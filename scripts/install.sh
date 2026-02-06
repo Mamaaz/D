@@ -133,7 +133,8 @@ check_dependencies() {
 # 获取最新版本号
 get_latest_version() {
     local api_url="https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases/latest"
-    local latest=$(curl -s --connect-timeout 5 "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+    # 添加超时限制，防止卡住
+    local latest=$(timeout 10 curl -s --connect-timeout 5 --max-time 10 "$api_url" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//' || echo "")
     
     if [ -n "$latest" ]; then
         echo "$latest"
@@ -275,10 +276,10 @@ OnUnitActiveSec=5min
 WantedBy=timers.target
 EOF
     
-    # 启用 timer
-    systemctl daemon-reload
-    systemctl enable proxy-health.timer 2>/dev/null || true
-    systemctl start proxy-health.timer 2>/dev/null || true
+    # 启用 timer (添加超时限制)
+    timeout 10 systemctl daemon-reload 2>/dev/null || true
+    timeout 10 systemctl enable proxy-health.timer 2>/dev/null || true
+    timeout 10 systemctl start proxy-health.timer 2>/dev/null || true
     
     log_success "健康检查定时器已安装 (每5分钟检查一次)"
 }
@@ -405,12 +406,12 @@ do_uninstall() {
         exit 0
     fi
     
-    # 停止并删除健康检查 timer
-    systemctl stop proxy-health.timer 2>/dev/null || true
-    systemctl disable proxy-health.timer 2>/dev/null || true
+    # 停止并删除健康检查 timer (添加超时防止卡住)
+    timeout 10 systemctl stop proxy-health.timer 2>/dev/null || true
+    timeout 10 systemctl disable proxy-health.timer 2>/dev/null || true
     rm -f /etc/systemd/system/proxy-health.service
     rm -f /etc/systemd/system/proxy-health.timer
-    systemctl daemon-reload
+    timeout 10 systemctl daemon-reload 2>/dev/null || true
     
     # 删除二进制文件和配置
     rm -f "${INSTALL_DIR}/${BINARY_NAME}"
