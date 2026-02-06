@@ -52,11 +52,11 @@ func PrintWarn(format string, args ...interface{}) {
 // =========================================
 
 const (
-	DefaultSnellVersion     = "5.0.1"
+	DefaultSnellVersion     = "4.1.1" // Stable, v5 is beta
 	DefaultSingboxVersion   = "v1.12.0"
 	DefaultShadowTLSVersion = "v0.2.25"
 	DefaultHysteria2Version = "v2.6.1"
-	DefaultAnyTLSVersion    = "v0.1.0"
+	DefaultAnyTLSVersion    = "v0.0.12"
 )
 
 // =========================================
