@@ -160,40 +160,32 @@ download_binary() {
     local version=${1:-$VERSION}
     local temp_file=$(mktemp)
     
-    # 尝试从 GitHub Releases 下载
-    local download_url="${RELEASE_URL}/${BINARY_NAME}-${OS}-${ARCH}"
-    
     log_info "正在下载 ${BINARY_NAME} v${version} (${OS}-${ARCH})..."
     
-    if curl -sL --fail "$download_url" -o "$temp_file" 2>/dev/null; then
+    # 尝试备用下载地址 (raw.githubusercontent.com/dist)
+    local download_url="${RAW_URL}/dist/${BINARY_NAME}-${OS}-${ARCH}"
+    log_info "下载地址: $download_url"
+    
+    if curl -L --connect-timeout 10 --max-time 120 --progress-bar "$download_url" -o "$temp_file" 2>&1; then
         # 验证文件大小
-        local size=$(stat -f%z "$temp_file" 2>/dev/null || stat -c%s "$temp_file" 2>/dev/null || echo 0)
+        local size=$(stat -c%s "$temp_file" 2>/dev/null || stat -f%z "$temp_file" 2>/dev/null || echo 0)
+        log_info "下载文件大小: ${size} bytes"
+        
         if [ "$size" -gt 1000000 ]; then  # 至少 1MB
             mv "$temp_file" "${INSTALL_DIR}/${BINARY_NAME}"
             chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
             log_success "二进制文件下载成功"
             return 0
+        else
+            log_error "下载的文件太小，可能下载失败"
         fi
-    fi
-    
-    rm -f "$temp_file"
-    
-    # 尝试备用下载地址 (raw.githubusercontent.com)
-    log_warn "主下载源失败，尝试备用源..."
-    local alt_url="${RAW_URL}/dist/${BINARY_NAME}-${OS}-${ARCH}"
-    
-    if curl -sL --fail "$alt_url" -o "$temp_file" 2>/dev/null; then
-        local size=$(stat -f%z "$temp_file" 2>/dev/null || stat -c%s "$temp_file" 2>/dev/null || echo 0)
-        if [ "$size" -gt 1000000 ]; then
-            mv "$temp_file" "${INSTALL_DIR}/${BINARY_NAME}"
-            chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-            log_success "二进制文件下载成功 (备用源)"
-            return 0
-        fi
+    else
+        log_error "curl 下载失败"
     fi
     
     rm -f "$temp_file"
     log_error "下载失败，请检查网络连接"
+    log_info "您也可以手动下载: $download_url"
     return 1
 }
 
