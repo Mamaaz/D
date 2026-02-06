@@ -288,8 +288,12 @@ do_install() {
     check_root
     detect_os
     detect_arch
-    check_dependencies
     
+    log_info "检查依赖..."
+    check_dependencies
+    log_success "依赖检查完成"
+    
+    log_info "检查现有安装..."
     local current_version=$(get_installed_version)
     if [ -n "$current_version" ]; then
         log_warn "检测到已安装版本: v${current_version}"
@@ -300,10 +304,17 @@ do_install() {
             exit 0
         fi
         echo ""
+    else
+        log_info "未检测到现有安装"
     fi
     
+    log_info "创建目录..."
     create_directories
+    
+    log_info "开始下载..."
     download_binary || exit 1
+    
+    log_info "安装健康检查..."
     install_health_timer
     
     echo ""
