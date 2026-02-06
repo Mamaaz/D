@@ -252,14 +252,18 @@ func installAcmeAndCert(domain string) error {
 		}
 	}
 
-	// 申请证书
+	// 申请证书 (添加 --force 处理已存在的密钥)
 	utils.PrintInfo("申请 Let's Encrypt 证书...")
-	cmd := exec.Command(acmePath, "--issue", "-d", domain, "--standalone", "--keylength", "ec-256")
+	cmd := exec.Command(acmePath, "--issue", "-d", domain, "--standalone", "--keylength", "ec-256", "--force")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		// 尝试使用 nginx 模式
-		cmd = exec.Command(acmePath, "--issue", "-d", domain, "--webroot", "/var/www/html", "--keylength", "ec-256")
+		// 尝试使用 webroot 模式
+		utils.PrintWarn("standalone 模式失败，尝试 webroot 模式...")
+		os.MkdirAll("/var/www/html", 0755)
+		cmd = exec.Command(acmePath, "--issue", "-d", domain, "--webroot", "/var/www/html", "--keylength", "ec-256", "--force")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("证书申请失败，请确保域名已解析且端口 80 可用")
 		}
