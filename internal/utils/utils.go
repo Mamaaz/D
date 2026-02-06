@@ -52,7 +52,7 @@ func PrintWarn(format string, args ...interface{}) {
 // =========================================
 
 const (
-	DefaultSnellVersion     = "4.1.1" // Stable, v5 is beta
+	DefaultSnellVersion     = "5.0.1" // Fallback version
 	DefaultSingboxVersion   = "v1.12.0"
 	DefaultShadowTLSVersion = "v0.2.25"
 	DefaultHysteria2Version = "v2.6.1"
@@ -122,12 +122,17 @@ type GitHubRelease struct {
 func GetLatestVersion(repo, defaultVersion string) string {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
+		PrintWarn("获取版本失败，使用默认版本: %s", defaultVersion)
 		return defaultVersion
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return defaultVersion
+	}
 
 	var release GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
@@ -140,10 +145,87 @@ func GetLatestVersion(repo, defaultVersion string) string {
 	return defaultVersion
 }
 
-// GetSnellLatestVersion 获取 Snell 最新版本
+// GetSnellLatestVersion 从 Surge KB 获取 Snell 最新版本
 func GetSnellLatestVersion() string {
-	// Snell 没有公开的版本 API，使用默认版本
+	PrintInfo("正在检查 Snell 最新版本...")
+
+	// 从 Surge KB 页面获取版本信息
+	url := "https://kb.nssurge.com/surge-knowledge-base/release-notes/snell"
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		PrintWarn("获取 Snell 版本失败，使用默认版本: %s", DefaultSnellVersion)
+		return DefaultSnellVersion
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return DefaultSnellVersion
+	}
+
+	// 解析版本号 (查找 #v5.0.1 或 #v4.1.1 格式)
+	content := string(body)
+	version := parseSnellVersion(content)
+	if version != "" {
+		PrintSuccess("Snell 最新版本: %s", version)
+		return version
+	}
+
+	PrintWarn("无法解析 Snell 版本，使用默认版本: %s", DefaultSnellVersion)
 	return DefaultSnellVersion
+}
+
+// parseSnellVersion 从页面内容解析 Snell 版本号
+func parseSnellVersion(content string) string {
+	// 查找形如 #v5.0.1 或 v5.0.1 的版本号
+	// 优先返回第一个找到的版本（最新版本）
+	patterns := []string{"#v", "\"v", "/v"}
+
+	for _, pattern := range patterns {
+		idx := strings.Index(content, pattern)
+		if idx == -1 {
+			continue
+		}
+
+		// 跳过 pattern，获取版本号
+		start := idx + len(pattern)
+		if start >= len(content) {
+			continue
+		}
+
+		// 如果是 #v 格式，版本从 v 开始
+		if pattern == "#v" {
+			start = idx + 1 // 保留 v
+		}
+
+		// 提取版本号 (格式: v5.0.1 或 5.0.1)
+		end := start
+		for end < len(content) {
+			c := content[end]
+			if (c >= '0' && c <= '9') || c == '.' || c == 'v' {
+				end++
+			} else {
+				break
+			}
+		}
+
+		version := content[start:end]
+		// 验证版本格式
+		if len(version) >= 5 && strings.Count(version, ".") >= 1 {
+			return version
+		}
+	}
+
+	return ""
+}
+
+// GetSingboxLatestVersion 获取 sing-box 最新版本 (便捷函数)
+func GetSingboxLatestVersion() string {
+	PrintInfo("正在检查 sing-box 最新版本...")
+	version := GetLatestVersion("SagerNet/sing-box", DefaultSingboxVersion)
+	PrintSuccess("sing-box 最新版本: %s", version)
+	return version
 }
 
 // =========================================
