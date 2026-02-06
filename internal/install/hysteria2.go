@@ -231,7 +231,7 @@ func createHysteria2SingboxConfig(cfg Hysteria2Config) error {
 		return err
 	}
 
-	if err := utils.WriteFile(Hysteria2ConfigPath, string(data), 0600); err != nil {
+	if err := utils.WriteFile(Hysteria2ConfigPath, string(data), 0644); err != nil {
 		return err
 	}
 
