@@ -175,15 +175,22 @@ func installCertToHysteria2(domain string) error {
 	cmd := exec.Command(acmePath, "--install-cert", "-d", domain, "--ecc",
 		"--key-file", Hysteria2KeyPath,
 		"--fullchain-file", Hysteria2CertPath,
-		"--reloadcmd", fmt.Sprintf("chown hysteria2:%s %s %s && chmod 600 %s && systemctl restart hysteria2 2>/dev/null || true",
-			defaultGroup, Hysteria2KeyPath, Hysteria2CertPath, Hysteria2KeyPath))
+		"--reloadcmd", fmt.Sprintf("chown hysteria2:%s %s %s && chmod 600 %s && chmod 644 %s && systemctl restart hysteria2 2>/dev/null || true",
+			defaultGroup, Hysteria2KeyPath, Hysteria2CertPath, Hysteria2KeyPath, Hysteria2CertPath))
 
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 
+	// 立即设置权限 (首次安装时 reloadcmd 不会执行)
 	os.Chmod(Hysteria2KeyPath, 0600)
 	os.Chmod(Hysteria2CertPath, 0644)
+
+	// 设置正确的所有权为 hysteria2 用户
+	chownCmd := exec.Command("chown", fmt.Sprintf("hysteria2:%s", defaultGroup), Hysteria2KeyPath, Hysteria2CertPath)
+	if err := chownCmd.Run(); err != nil {
+		utils.PrintWarn("设置证书所有权失败: %v", err)
+	}
 
 	utils.PrintSuccess("证书安装成功")
 	return nil

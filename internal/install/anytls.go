@@ -280,17 +280,22 @@ func installCertToAnyTLS(domain string) error {
 	cmd := exec.Command(acmePath, "--install-cert", "-d", domain, "--ecc",
 		"--key-file", AnyTLSKeyPath,
 		"--fullchain-file", AnyTLSCertPath,
-		"--reloadcmd", fmt.Sprintf("chown anytls:%s %s %s && chmod 600 %s && systemctl restart anytls 2>/dev/null || true",
-			defaultGroup, AnyTLSKeyPath, AnyTLSCertPath, AnyTLSKeyPath))
+		"--reloadcmd", fmt.Sprintf("chown anytls:%s %s %s && chmod 600 %s && chmod 644 %s && systemctl restart anytls 2>/dev/null || true",
+			defaultGroup, AnyTLSKeyPath, AnyTLSCertPath, AnyTLSKeyPath, AnyTLSCertPath))
 
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 
-	// 设置权限
-	os.Chown(AnyTLSKeyPath, -1, -1) // 由 reloadcmd 处理
+	// 立即设置权限 (首次安装时 reloadcmd 不会执行)
 	os.Chmod(AnyTLSKeyPath, 0600)
 	os.Chmod(AnyTLSCertPath, 0644)
+
+	// 设置正确的所有权为 anytls 用户
+	chownCmd := exec.Command("chown", fmt.Sprintf("anytls:%s", defaultGroup), AnyTLSKeyPath, AnyTLSCertPath)
+	if err := chownCmd.Run(); err != nil {
+		utils.PrintWarn("设置证书所有权失败: %v", err)
+	}
 
 	utils.PrintSuccess("证书安装成功")
 	return nil
