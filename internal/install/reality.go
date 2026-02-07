@@ -267,7 +267,7 @@ func createRealityConfig(cfg RealityConfig) error {
 		return err
 	}
 
-	return utils.WriteFile(RealityConfigPath, string(data), 0600)
+	return utils.WriteFile(RealityConfigPath, string(data), PermConfigFile)
 }
 
 func createRealityService() error {

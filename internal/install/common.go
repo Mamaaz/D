@@ -158,7 +158,7 @@ func SaveConfigFile(path string, config map[string]string) error {
 	for k, v := range config {
 		lines = append(lines, fmt.Sprintf("%s=%s", k, v))
 	}
-	return utils.WriteFile(path, strings.Join(lines, "\n")+"\n", 0600)
+	return utils.WriteFile(path, strings.Join(lines, "\n")+"\n", PermProxyConf)
 }
 
 // =========================================

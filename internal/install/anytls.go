@@ -283,7 +283,7 @@ func createAnyTLSSingboxConfig(cfg AnyTLSConfig, paddingScheme []string) error {
 		return err
 	}
 
-	if err := utils.WriteFile(AnyTLSConfigPath, string(data), 0644); err != nil {
+	if err := utils.WriteFile(AnyTLSConfigPath, string(data), PermConfigFile); err != nil {
 		return err
 	}
 

@@ -281,7 +281,7 @@ func createSingboxConfig(cfg SingboxConfig) error {
 		return err
 	}
 
-	return utils.WriteFile(SingboxConfigPath, string(data), 0600)
+	return utils.WriteFile(SingboxConfigPath, string(data), PermConfigFile)
 }
 
 func createSingboxService() error {
