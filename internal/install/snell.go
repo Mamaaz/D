@@ -168,9 +168,15 @@ func downloadSnell(version, arch string) error {
 		snellArch = "aarch64"
 	}
 
+	// 去掉版本号的 v 前缀，因为 URL 格式已包含 v
+	versionNum := version
+	if len(version) > 0 && version[0] == 'v' {
+		versionNum = version[1:]
+	}
+
 	url := fmt.Sprintf(
 		"https://dl.nssurge.com/snell/snell-server-v%s-linux-%s.zip",
-		version, snellArch,
+		versionNum, snellArch,
 	)
 
 	tempFile := "/tmp/snell.zip"
@@ -220,9 +226,15 @@ func downloadShadowTLS(version, arch string) error {
 		shadowArch = "aarch64"
 	}
 
+	// 版本号需要带 v 前缀
+	versionTag := version
+	if len(version) > 0 && version[0] != 'v' {
+		versionTag = "v" + version
+	}
+
 	url := fmt.Sprintf(
 		"https://github.com/ihciah/shadow-tls/releases/download/%s/shadow-tls-%s-unknown-linux-musl",
-		version, shadowArch,
+		versionTag, shadowArch,
 	)
 
 	if err := utils.DownloadFile(url, ShadowTLSBinaryPath, 3); err != nil {
@@ -370,7 +382,7 @@ func ViewSnellConfig() {
 // Snell 更新
 // =========================================
 
-// UpdateSnell 更新 Snell
+// UpdateSnell 更新 Snell + Shadow-TLS
 func UpdateSnell() error {
 	if !utils.FileExists(SnellProxyConfigPath) {
 		return fmt.Errorf("Snell 未安装")
@@ -381,13 +393,23 @@ func UpdateSnell() error {
 		return err
 	}
 
-	currentVersion := config["SNELL_VERSION"]
-	latestVersion := utils.GetSnellLatestVersion()
+	// 检查 Snell 版本
+	currentSnellVersion := config["SNELL_VERSION"]
+	latestSnellVersion := utils.GetSnellLatestVersion()
 
-	fmt.Printf("%s当前版本:%s %s\n", utils.ColorCyan, utils.ColorReset, currentVersion)
-	fmt.Printf("%s最新版本:%s %s\n", utils.ColorCyan, utils.ColorReset, latestVersion)
+	// 检查 Shadow-TLS 版本
+	currentShadowTLSVersion := config["SHADOW_TLS_VERSION"]
+	latestShadowTLSVersion := utils.GetLatestVersion("ihciah/shadow-tls", utils.DefaultShadowTLSVersion)
 
-	if currentVersion == latestVersion {
+	fmt.Printf("%sSnell 当前版本:%s %s\n", utils.ColorCyan, utils.ColorReset, currentSnellVersion)
+	fmt.Printf("%sSnell 最新版本:%s %s\n", utils.ColorCyan, utils.ColorReset, latestSnellVersion)
+	fmt.Printf("%sShadow-TLS 当前版本:%s %s\n", utils.ColorCyan, utils.ColorReset, currentShadowTLSVersion)
+	fmt.Printf("%sShadow-TLS 最新版本:%s %s\n", utils.ColorCyan, utils.ColorReset, latestShadowTLSVersion)
+
+	needUpdateSnell := currentSnellVersion != latestSnellVersion
+	needUpdateShadowTLS := currentShadowTLSVersion != latestShadowTLSVersion
+
+	if !needUpdateSnell && !needUpdateShadowTLS {
 		utils.PrintSuccess("已是最新版本")
 		return nil
 	}
@@ -400,29 +422,49 @@ func UpdateSnell() error {
 	utils.ServiceStop("shadow-tls")
 	utils.ServiceStop("snell")
 
-	// 备份旧版本
-	os.Rename(SnellBinaryPath, SnellBinaryPath+".bak")
-
-	// 下载新版本
 	arch, _ := utils.DetectArch()
-	if err := downloadSnell(latestVersion, arch); err != nil {
-		// 回滚
-		os.Rename(SnellBinaryPath+".bak", SnellBinaryPath)
-		utils.ServiceStart("snell")
-		utils.ServiceStart("shadow-tls")
-		return fmt.Errorf("更新失败: %v", err)
+
+	// 更新 Snell
+	if needUpdateSnell {
+		os.Rename(SnellBinaryPath, SnellBinaryPath+".bak")
+		os.Remove(SnellBinaryPath) // 确保下载新版本
+		if err := downloadSnell(latestSnellVersion, arch); err != nil {
+			os.Rename(SnellBinaryPath+".bak", SnellBinaryPath)
+			utils.ServiceStart("snell")
+			utils.ServiceStart("shadow-tls")
+			return fmt.Errorf("Snell 更新失败: %v", err)
+		}
+		os.Remove(SnellBinaryPath + ".bak")
+		config["SNELL_VERSION"] = latestSnellVersion
 	}
 
-	// 更新配置中的版本
-	config["SNELL_VERSION"] = latestVersion
+	// 更新 Shadow-TLS
+	if needUpdateShadowTLS {
+		os.Rename(ShadowTLSBinaryPath, ShadowTLSBinaryPath+".bak")
+		os.Remove(ShadowTLSBinaryPath) // 确保下载新版本
+		if err := downloadShadowTLS(latestShadowTLSVersion, arch); err != nil {
+			os.Rename(ShadowTLSBinaryPath+".bak", ShadowTLSBinaryPath)
+			utils.ServiceStart("snell")
+			utils.ServiceStart("shadow-tls")
+			return fmt.Errorf("Shadow-TLS 更新失败: %v", err)
+		}
+		os.Remove(ShadowTLSBinaryPath + ".bak")
+		config["SHADOW_TLS_VERSION"] = latestShadowTLSVersion
+	}
+
+	// 保存更新后的配置
 	SaveConfigFile(SnellProxyConfigPath, config)
 
 	// 启动服务
 	utils.ServiceStart("snell")
 	utils.ServiceStart("shadow-tls")
 
-	os.Remove(SnellBinaryPath + ".bak")
-	utils.PrintSuccess("更新成功: %s -> %s", currentVersion, latestVersion)
+	if needUpdateSnell {
+		utils.PrintSuccess("Snell 更新成功: %s -> %s", currentSnellVersion, latestSnellVersion)
+	}
+	if needUpdateShadowTLS {
+		utils.PrintSuccess("Shadow-TLS 更新成功: %s -> %s", currentShadowTLSVersion, latestShadowTLSVersion)
+	}
 	return nil
 }
 

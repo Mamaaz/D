@@ -473,6 +473,14 @@ func UninstallAnyTLS() error {
 
 	utils.DeleteSystemUser("anytls")
 
+	// 如果没有其他服务使用 sing-box，删除二进制
+	if !IsSingboxShared(AnyTLSProxyConfigPath) {
+		os.Remove(SingboxBinaryPath)
+		utils.DeleteSystemUser("sing-box")
+	} else {
+		utils.PrintInfo("其他服务仍在使用 sing-box，保留二进制文件")
+	}
+
 	utils.PrintSuccess("AnyTLS 已卸载")
 	return nil
 }

@@ -429,13 +429,17 @@ func UninstallSingbox() error {
 	// 删除服务
 	RemoveSystemdService("sing-box")
 
-	// 删除文件
-	os.Remove(SingboxBinaryPath)
+	// 删除配置
 	os.RemoveAll(SingboxConfigDir)
 	os.Remove(SingboxProxyConfigPath)
 
-	// 删除用户
-	utils.DeleteSystemUser("sing-box")
+	// 如果没有其他服务使用 sing-box，删除二进制和用户
+	if !IsSingboxShared(SingboxProxyConfigPath) {
+		os.Remove(SingboxBinaryPath)
+		utils.DeleteSystemUser("sing-box")
+	} else {
+		utils.PrintInfo("其他服务仍在使用 sing-box，保留二进制文件")
+	}
 
 	utils.PrintSuccess("Sing-box 已卸载")
 	return nil

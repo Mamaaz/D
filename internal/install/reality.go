@@ -419,10 +419,12 @@ func UninstallReality() error {
 	os.RemoveAll(RealityConfigDir)
 	os.Remove(RealityProxyConfigPath)
 
-	// 如果没有其他 sing-box 服务在使用，删除二进制
-	if !utils.FileExists(SingboxProxyConfigPath) {
+	// 如果没有其他服务使用 sing-box，删除二进制和用户
+	if !IsSingboxShared(RealityProxyConfigPath) {
 		os.Remove(SingboxBinaryPath)
 		utils.DeleteSystemUser("sing-box")
+	} else {
+		utils.PrintInfo("其他服务仍在使用 sing-box，保留二进制文件")
 	}
 
 	utils.PrintSuccess("VLESS Reality 已卸载")

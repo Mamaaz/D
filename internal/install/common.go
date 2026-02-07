@@ -123,6 +123,32 @@ func RenewCertForService(serviceName, configPath, domainKey, keyPath, certPath s
 	return nil
 }
 
+// IsSingboxShared 检查是否有其他服务还在使用 sing-box 二进制
+// excludeConfigs 为当前正在卸载的服务的配置路径，应排除在检查之外
+func IsSingboxShared(excludeConfigs ...string) bool {
+	allConfigs := []string{
+		SingboxProxyConfigPath,
+		RealityProxyConfigPath,
+		Hysteria2ProxyConfigPath,
+		AnyTLSProxyConfigPath,
+	}
+
+	excluded := make(map[string]bool)
+	for _, c := range excludeConfigs {
+		excluded[c] = true
+	}
+
+	for _, cfg := range allConfigs {
+		if excluded[cfg] {
+			continue
+		}
+		if utils.FileExists(cfg) {
+			return true
+		}
+	}
+	return false
+}
+
 // =========================================
 // 配置文件解析
 // =========================================

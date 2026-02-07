@@ -457,6 +457,14 @@ func UninstallHysteria2() error {
 
 	utils.DeleteSystemUser("hysteria2")
 
+	// 如果没有其他服务使用 sing-box，删除二进制
+	if !IsSingboxShared(Hysteria2ProxyConfigPath) {
+		os.Remove(SingboxBinaryPath)
+		utils.DeleteSystemUser("sing-box")
+	} else {
+		utils.PrintInfo("其他服务仍在使用 sing-box，保留二进制文件")
+	}
+
 	utils.PrintSuccess("Hysteria2 已卸载")
 	return nil
 }
