@@ -167,33 +167,9 @@ func InstallHysteria2() (*InstallResult, error) {
 	return result, nil
 }
 
-// installCertToHysteria2 安装证书到 Hysteria2 目录
+// installCertToHysteria2 安装证书到 Hysteria2 目录 (委托通用函数)
 func installCertToHysteria2(domain string) error {
-	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
-	defaultGroup := utils.GetDefaultGroup()
-
-	cmd := exec.Command(acmePath, "--install-cert", "-d", domain, "--ecc",
-		"--key-file", Hysteria2KeyPath,
-		"--fullchain-file", Hysteria2CertPath,
-		"--reloadcmd", fmt.Sprintf("chown hysteria2:%s %s %s && chmod 600 %s && chmod 644 %s && systemctl restart hysteria2 2>/dev/null || true",
-			defaultGroup, Hysteria2KeyPath, Hysteria2CertPath, Hysteria2KeyPath, Hysteria2CertPath))
-
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	// 立即设置权限 (首次安装时 reloadcmd 不会执行)
-	os.Chmod(Hysteria2KeyPath, 0600)
-	os.Chmod(Hysteria2CertPath, 0644)
-
-	// 设置正确的所有权为 hysteria2 用户
-	chownCmd := exec.Command("chown", fmt.Sprintf("hysteria2:%s", defaultGroup), Hysteria2KeyPath, Hysteria2CertPath)
-	if err := chownCmd.Run(); err != nil {
-		utils.PrintWarn("设置证书所有权失败: %v", err)
-	}
-
-	utils.PrintSuccess("证书安装成功")
-	return nil
+	return InstallCertForService(domain, "hysteria2", Hysteria2KeyPath, Hysteria2CertPath)
 }
 
 // createHysteria2SingboxConfig 创建 sing-box 配置
@@ -449,38 +425,7 @@ func UpdateHysteria2() error {
 
 // RenewHysteria2Cert 续签 Hysteria2 证书
 func RenewHysteria2Cert() error {
-	if !utils.FileExists(Hysteria2ProxyConfigPath) {
-		return fmt.Errorf("Hysteria2 未安装")
-	}
-
-	config, err := ParseConfigFile(Hysteria2ProxyConfigPath)
-	if err != nil {
-		return err
-	}
-
-	domain := config["HYSTERIA2_DOMAIN"]
-	if domain == "" {
-		return fmt.Errorf("未找到域名配置")
-	}
-
-	utils.PrintInfo("正在续签证书: %s", domain)
-
-	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
-	cmd := exec.Command(acmePath, "--renew", "-d", domain, "--ecc", "--force")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("证书续签失败: %v", err)
-	}
-
-	if err := installCertToHysteria2(domain); err != nil {
-		return err
-	}
-
-	utils.ServiceRestart("hysteria2")
-	utils.PrintSuccess("证书续签成功")
-	return nil
+	return RenewCertForService("hysteria2", Hysteria2ProxyConfigPath, "HYSTERIA2_DOMAIN", Hysteria2KeyPath, Hysteria2CertPath)
 }
 
 // =========================================

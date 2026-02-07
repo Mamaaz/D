@@ -238,67 +238,14 @@ func selectPaddingScheme() string {
 	}
 }
 
-// installAcmeAndCert 安装 acme.sh 并申请证书
+// installAcmeAndCert 安装 acme.sh 并申请证书 (委托通用函数)
 func installAcmeAndCert(domain string) error {
-	// 检查 acme.sh 是否已安装
-	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
-	if !utils.FileExists(acmePath) {
-		utils.PrintInfo("安装 acme.sh...")
-		cmd := exec.Command("bash", "-c", "curl -sL https://get.acme.sh | sh -s email=admin@"+domain)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("安装 acme.sh 失败: %v", err)
-		}
-	}
-
-	// 申请证书 (添加 --force 处理已存在的密钥)
-	utils.PrintInfo("申请 Let's Encrypt 证书...")
-	cmd := exec.Command(acmePath, "--issue", "-d", domain, "--standalone", "--keylength", "ec-256", "--force")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		// 尝试使用 webroot 模式
-		utils.PrintWarn("standalone 模式失败，尝试 webroot 模式...")
-		os.MkdirAll("/var/www/html", 0755)
-		cmd = exec.Command(acmePath, "--issue", "-d", domain, "--webroot", "/var/www/html", "--keylength", "ec-256", "--force")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("证书申请失败，请确保域名已解析且端口 80 可用")
-		}
-	}
-
-	return nil
+	return InstallAcme(domain)
 }
 
-// installCertToAnyTLS 安装证书到 AnyTLS 目录
+// installCertToAnyTLS 安装证书到 AnyTLS 目录 (委托通用函数)
 func installCertToAnyTLS(domain string) error {
-	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
-	defaultGroup := utils.GetDefaultGroup()
-
-	cmd := exec.Command(acmePath, "--install-cert", "-d", domain, "--ecc",
-		"--key-file", AnyTLSKeyPath,
-		"--fullchain-file", AnyTLSCertPath,
-		"--reloadcmd", fmt.Sprintf("chown anytls:%s %s %s && chmod 600 %s && chmod 644 %s && systemctl restart anytls 2>/dev/null || true",
-			defaultGroup, AnyTLSKeyPath, AnyTLSCertPath, AnyTLSKeyPath, AnyTLSCertPath))
-
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	// 立即设置权限 (首次安装时 reloadcmd 不会执行)
-	os.Chmod(AnyTLSKeyPath, 0600)
-	os.Chmod(AnyTLSCertPath, 0644)
-
-	// 设置正确的所有权为 anytls 用户
-	chownCmd := exec.Command("chown", fmt.Sprintf("anytls:%s", defaultGroup), AnyTLSKeyPath, AnyTLSCertPath)
-	if err := chownCmd.Run(); err != nil {
-		utils.PrintWarn("设置证书所有权失败: %v", err)
-	}
-
-	utils.PrintSuccess("证书安装成功")
-	return nil
+	return InstallCertForService(domain, "anytls", AnyTLSKeyPath, AnyTLSCertPath)
 }
 
 // createAnyTLSSingboxConfig 创建 sing-box 配置
@@ -494,38 +441,7 @@ func UpdateAnyTLS() error {
 
 // RenewAnyTLSCert 续签 AnyTLS 证书
 func RenewAnyTLSCert() error {
-	if !utils.FileExists(AnyTLSProxyConfigPath) {
-		return fmt.Errorf("AnyTLS 未安装")
-	}
-
-	config, err := ParseConfigFile(AnyTLSProxyConfigPath)
-	if err != nil {
-		return err
-	}
-
-	domain := config["ANYTLS_DOMAIN"]
-	if domain == "" {
-		return fmt.Errorf("未找到域名配置")
-	}
-
-	utils.PrintInfo("正在续签证书: %s", domain)
-
-	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
-	cmd := exec.Command(acmePath, "--renew", "-d", domain, "--ecc", "--force")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("证书续签失败: %v", err)
-	}
-
-	if err := installCertToAnyTLS(domain); err != nil {
-		return err
-	}
-
-	utils.ServiceRestart("anytls")
-	utils.PrintSuccess("证书续签成功")
-	return nil
+	return RenewCertForService("anytls", AnyTLSProxyConfigPath, "ANYTLS_DOMAIN", AnyTLSKeyPath, AnyTLSCertPath)
 }
 
 // =========================================

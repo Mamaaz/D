@@ -2,6 +2,7 @@ package install
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -9,12 +10,118 @@ import (
 )
 
 // =========================================
-// 通用常量
+// 权限常量
 // =========================================
 
 const (
 	SystemdPath = "/lib/systemd/system"
+
+	// 文件权限
+	PermConfigFile = 0644 // 配置文件 (服务用户可读)
+	PermKeyFile    = 0600 // 密钥文件 (仅所有者可读)
+	PermCertFile   = 0644 // 证书文件 (公开可读)
+	PermProxyConf  = 0600 // 代理配置文件 (含密码)
 )
+
+// =========================================
+// 通用证书管理
+// =========================================
+
+// InstallAcme 安装 acme.sh 并申请证书
+func InstallAcme(domain string) error {
+	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
+	if !utils.FileExists(acmePath) {
+		utils.PrintInfo("安装 acme.sh...")
+		cmd := exec.Command("bash", "-c", "curl -sL https://get.acme.sh | sh -s email=admin@"+domain)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("安装 acme.sh 失败: %v", err)
+		}
+	}
+
+	utils.PrintInfo("申请 Let's Encrypt 证书...")
+	cmd := exec.Command(acmePath, "--issue", "-d", domain, "--standalone", "--keylength", "ec-256", "--force")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		utils.PrintWarn("standalone 模式失败，尝试 webroot 模式...")
+		os.MkdirAll("/var/www/html", 0755)
+		cmd = exec.Command(acmePath, "--issue", "-d", domain, "--webroot", "/var/www/html", "--keylength", "ec-256", "--force")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("证书申请失败，请确保域名已解析且端口 80 可用")
+		}
+	}
+
+	return nil
+}
+
+// InstallCertForService 安装证书到指定服务目录
+func InstallCertForService(domain, serviceName, keyPath, certPath string) error {
+	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
+	defaultGroup := utils.GetDefaultGroup()
+
+	cmd := exec.Command(acmePath, "--install-cert", "-d", domain, "--ecc",
+		"--key-file", keyPath,
+		"--fullchain-file", certPath,
+		"--reloadcmd", fmt.Sprintf("chown %s:%s %s %s && chmod 600 %s && chmod 644 %s && systemctl restart %s 2>/dev/null || true",
+			serviceName, defaultGroup, keyPath, certPath, keyPath, certPath, serviceName))
+
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// 立即设置权限 (首次安装时 reloadcmd 不会执行)
+	os.Chmod(keyPath, PermKeyFile)
+	os.Chmod(certPath, PermCertFile)
+
+	// 设置正确的所有权
+	chownCmd := exec.Command("chown", fmt.Sprintf("%s:%s", serviceName, defaultGroup), keyPath, certPath)
+	if err := chownCmd.Run(); err != nil {
+		utils.PrintWarn("设置证书所有权失败: %v", err)
+	}
+
+	utils.PrintSuccess("证书安装成功")
+	return nil
+}
+
+// RenewCertForService 续签指定服务的证书
+func RenewCertForService(serviceName, configPath, domainKey, keyPath, certPath string) error {
+	if !utils.FileExists(configPath) {
+		return fmt.Errorf("%s 未安装", serviceName)
+	}
+
+	config, err := ParseConfigFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	domain := config[domainKey]
+	if domain == "" {
+		return fmt.Errorf("未找到域名配置")
+	}
+
+	utils.PrintInfo("正在续签证书: %s", domain)
+
+	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
+	cmd := exec.Command(acmePath, "--renew", "-d", domain, "--ecc", "--force")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("证书续签失败: %v", err)
+	}
+
+	if err := InstallCertForService(domain, serviceName, keyPath, certPath); err != nil {
+		return err
+	}
+
+	utils.ServiceRestart(serviceName)
+	utils.PrintSuccess("证书续签成功")
+	return nil
+}
 
 // =========================================
 // 配置文件解析
