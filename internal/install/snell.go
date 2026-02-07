@@ -319,6 +319,12 @@ func promptPort(prompt string, defaultPort int) int {
 			utils.PrintError("%v", err)
 			continue
 		}
+		if utils.IsPortInUse(port) {
+			utils.PrintWarn("端口 %d 已被占用", port)
+			if !utils.PromptConfirm("是否仍然使用此端口？") {
+				continue
+			}
+		}
 		return port
 	}
 }

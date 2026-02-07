@@ -84,7 +84,7 @@ func showHelp() {
   - AnyTLS
 
 安装命令:
-  bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager_go/scripts/install.sh)
+  bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
 
 `, version)
 }
@@ -94,7 +94,7 @@ func doUpdate() {
 	fmt.Println()
 
 	// 构建安装脚本 URL
-	installURL := "https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager_go/scripts/install.sh"
+	installURL := "https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh"
 
 	// 使用 bash 执行更新脚本
 	cmd := exec.Command("bash", "-c", fmt.Sprintf("curl -sL '%s' | bash -s update", installURL))

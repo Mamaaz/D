@@ -48,13 +48,13 @@ var Services = map[string]Service{
 	"hysteria2": {
 		Name:        "hysteria2",
 		DisplayName: "Hysteria2",
-		ConfigPath:  "/etc/hysteria2/config.yaml",
+		ConfigPath:  "/etc/hysteria2/config.json",
 		SystemdName: "hysteria2",
 	},
 	"anytls": {
 		Name:        "anytls",
 		DisplayName: "AnyTLS",
-		ConfigPath:  "/etc/anytls/config.yaml",
+		ConfigPath:  "/etc/anytls/config.json",
 		SystemdName: "anytls",
 	},
 }

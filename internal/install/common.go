@@ -2,7 +2,7 @@ package install
 
 import (
 	"fmt"
-	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/Mamaaz/proxy-manager/internal/utils"
@@ -97,6 +97,13 @@ ExecStart=%s
 Restart=always
 RestartSec=10s
 
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc /var/log
+
 [Install]
 WantedBy=multi-user.target
 `, cfg.Description, cfg.After, cfg.User, cfg.Group, cfg.ExecStart, capLine)
@@ -163,11 +170,7 @@ func CheckDependencies() error {
 }
 
 func commandExists(cmd string) bool {
-	_, err := os.Stat("/usr/bin/" + cmd)
-	if err == nil {
-		return true
-	}
-	_, err = os.Stat("/usr/local/bin/" + cmd)
+	_, err := exec.LookPath(cmd)
 	return err == nil
 }
 
