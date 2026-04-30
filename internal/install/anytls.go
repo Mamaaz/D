@@ -195,6 +195,7 @@ func InstallAnyTLS() (*InstallResult, error) {
 	}
 
 	printAnyTLSSuccess(config, surgeProxy)
+	PrintFirewallHint(config.Port, FirewallTCP)
 
 	return result, nil
 }
@@ -226,10 +227,7 @@ func selectPaddingScheme() string {
 	fmt.Println("   最少填充，性能最优，隐蔽性较低")
 	fmt.Println()
 
-	var choice int
-	fmt.Print("请选择 [1-3] (默认: 1): ")
-	fmt.Scanln(&choice)
-
+	choice := utils.PromptInt("请选择", 1, 1, 3)
 	switch choice {
 	case 2:
 		return "aggressive"

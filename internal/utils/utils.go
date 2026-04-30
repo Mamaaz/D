@@ -2,6 +2,7 @@ package utils
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"crypto/rand"
 	"encoding/base64"
@@ -14,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -506,6 +508,22 @@ func GetDefaultGroup() string {
 // 交互输入
 // =========================================
 
+// stdinReader is a single shared bufio reader so multiple prompts in one
+// run share the same input stream. fmt.Scanln has a bug where pressing
+// Enter on an empty line leaves the newline in the buffer and the next
+// read picks it up; bufio.Scanner avoids that entirely.
+var stdinReader = bufio.NewReader(os.Stdin)
+
+// readLine reads a single trimmed line from stdin. EOF / read errors return
+// empty string so callers can apply their default-value logic uniformly.
+func readLine() string {
+	line, err := stdinReader.ReadString('\n')
+	if err != nil && line == "" {
+		return ""
+	}
+	return strings.TrimRight(line, "\r\n")
+}
+
 // PromptInput 获取用户输入
 func PromptInput(prompt, defaultValue string) string {
 	if defaultValue != "" {
@@ -513,10 +531,7 @@ func PromptInput(prompt, defaultValue string) string {
 	} else {
 		fmt.Printf("%s: ", prompt)
 	}
-
-	var input string
-	fmt.Scanln(&input)
-
+	input := strings.TrimSpace(readLine())
 	if input == "" {
 		return defaultValue
 	}
@@ -526,12 +541,34 @@ func PromptInput(prompt, defaultValue string) string {
 // PromptConfirm 确认提示
 func PromptConfirm(prompt string) bool {
 	fmt.Printf("%s (y/n): ", prompt)
-	var input string
-	fmt.Scanln(&input)
-	return strings.ToLower(input) == "y"
+	input := strings.TrimSpace(readLine())
+	return strings.EqualFold(input, "y") || strings.EqualFold(input, "yes")
 }
 
-// PromptSelect 选择菜单
+// PromptInt asks for an integer in [min, max]. Empty input returns the
+// default. Out-of-range or unparseable input re-prompts so the caller never
+// sees a garbage value.
+func PromptInt(prompt string, defaultValue, min, max int) int {
+	for {
+		fmt.Printf("%s (默认: %d): ", prompt, defaultValue)
+		raw := strings.TrimSpace(readLine())
+		if raw == "" {
+			return defaultValue
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			PrintWarn("不是数字，请重新输入")
+			continue
+		}
+		if n < min || n > max {
+			PrintWarn("范围 %d-%d，请重新输入", min, max)
+			continue
+		}
+		return n
+	}
+}
+
+// PromptSelect 选择菜单。返回 1-based index. 默认选项是 1.
 func PromptSelect(prompt string, options []string) int {
 	fmt.Println()
 	fmt.Println(prompt)
@@ -539,15 +576,7 @@ func PromptSelect(prompt string, options []string) int {
 		fmt.Printf("  %d. %s\n", i+1, opt)
 	}
 	fmt.Println()
-
-	var choice int
-	fmt.Print("请选择: ")
-	fmt.Scanln(&choice)
-
-	if choice < 1 || choice > len(options) {
-		return 1
-	}
-	return choice
+	return PromptInt("请选择", 1, 1, len(options))
 }
 
 // =========================================
@@ -567,6 +596,7 @@ var TLSDomains = []string{
 func SelectTLSDomain() string {
 	fmt.Println()
 	fmt.Println(ColorCyan + "选择 TLS 伪装域名:" + ColorReset)
+	PrintWarn("提示：默认列表里的域名很多人在用，自定义可降低指纹特征")
 	for i, domain := range TLSDomains {
 		suffix := ""
 		if i == 0 {
@@ -577,17 +607,29 @@ func SelectTLSDomain() string {
 	fmt.Println("  0. 自定义域名")
 	fmt.Println()
 
-	var choice int
-	fmt.Print("请选择 (默认: 1): ")
-	fmt.Scanln(&choice)
-
-	if choice == 0 {
-		return PromptInput("请输入自定义域名", "")
+	for {
+		fmt.Print("请选择 (默认: 1): ")
+		raw := strings.TrimSpace(readLine())
+		if raw == "" {
+			return TLSDomains[0]
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			PrintWarn("不是数字，请重新输入")
+			continue
+		}
+		if n == 0 {
+			d := PromptInput("请输入自定义域名", "")
+			if d == "" {
+				PrintWarn("自定义不能为空，请重新选择")
+				continue
+			}
+			return d
+		}
+		if n >= 1 && n <= len(TLSDomains) {
+			return TLSDomains[n-1]
+		}
+		PrintWarn("范围 0-%d，请重新输入", len(TLSDomains))
 	}
-
-	if choice < 1 || choice > len(TLSDomains) {
-		choice = 1
-	}
-
-	return TLSDomains[choice-1]
 }
+

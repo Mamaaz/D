@@ -139,6 +139,7 @@ func InstallReality() (*InstallResult, error) {
 	}
 
 	printRealitySuccess(config, surgeProxy)
+	PrintFirewallHint(config.Port, FirewallTCP)
 
 	return result, nil
 }
@@ -164,18 +165,16 @@ func selectRealityServerName() string {
 	fmt.Println("  0. 自定义服务器")
 	fmt.Println()
 
-	var choice int
-	fmt.Print("请选择 (默认: 1): ")
-	fmt.Scanln(&choice)
-
+	choice := utils.PromptInt("请选择", 1, 0, len(serverNames))
 	if choice == 0 {
-		return utils.PromptInput("请输入目标服务器", "")
+		for {
+			d := utils.PromptInput("请输入自定义目标服务器", "")
+			if d != "" {
+				return d
+			}
+			utils.PrintWarn("自定义不能为空")
+		}
 	}
-
-	if choice < 1 || choice > len(serverNames) {
-		choice = 1
-	}
-
 	return serverNames[choice-1]
 }
 
@@ -311,10 +310,14 @@ func createRealityConfig(cfg RealityConfig) error {
 }
 
 func createRealityService() error {
+	// CAP_NET_BIND_SERVICE is precisely the cap that lets a non-root user
+	// bind ports < 1024. Running as root + cap was contradictory — the cap
+	// is a no-op for root. Drop privileges to the dedicated sing-box user
+	// so Reality matches the same isolation model as the other protocols.
 	return CreateSystemdService(SystemdServiceConfig{
 		Name:         "sing-box-reality",
 		Description:  "Sing-box Reality Service",
-		User:         "root",
+		User:         "sing-box",
 		ExecStart:    fmt.Sprintf("%s run -c %s", SingboxBinaryPath, RealityConfigPath),
 		Capabilities: "CAP_NET_BIND_SERVICE",
 	})
