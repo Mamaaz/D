@@ -26,6 +26,9 @@ func main() {
 		case "export":
 			runExport(os.Args[2:])
 			return
+		case "subscribe":
+			runSubscribe(os.Args[2:])
+			return
 		case "--action":
 			// 执行指定操作 (由 TUI 调用)
 			if len(os.Args) > 2 {
@@ -80,6 +83,9 @@ func showHelp() {
   proxy-manager update       更新到最新版
   proxy-manager export --format=<json|surge|clash|singbox|xray>
                              导出已安装节点为指定格式 (输出到 stdout)
+  proxy-manager subscribe <command>
+                             订阅 HTTPS 服务: enable / disable / status / url / rotate-token
+                             (详细: proxy-manager subscribe --help)
 
 支持的协议:
   - Snell + Shadow-TLS
