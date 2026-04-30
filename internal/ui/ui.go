@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -525,7 +526,7 @@ func doUninstallPM() {
 
 func waitForEnter() {
 	fmt.Print("\n按回车键继续...")
-	fmt.Scanln()
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
 
 // =========================================
@@ -539,9 +540,7 @@ func RunSimpleMenu() {
 		showStatus()
 		showMenu()
 
-		var choice int
-		fmt.Print("请选择 [0-13]: ")
-		fmt.Scanln(&choice)
+		choice := utils.PromptInt("请选择", 0, 0, 13)
 
 		switch choice {
 		case 1:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -225,8 +226,12 @@ func flagPresent(args []string, key string) bool {
 
 func prompt(msg, fallback string) string {
 	fmt.Print(msg)
-	var s string
-	_, _ = fmt.Scanln(&s)
+	rd := bufio.NewReader(os.Stdin)
+	line, err := rd.ReadString('\n')
+	if err != nil && line == "" {
+		return fallback
+	}
+	s := strings.TrimSpace(line)
 	if s == "" {
 		return fallback
 	}

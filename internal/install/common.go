@@ -344,3 +344,53 @@ func (r *InstallResult) PrintClashConfig() {
 		fmt.Printf("%s%s%s\n", utils.ColorGreen, r.ClashProxy, utils.ColorReset)
 	}
 }
+
+// =========================================
+// 防火墙提示
+// =========================================
+
+// FirewallProto identifies the transport for the firewall hint. Hysteria2
+// is UDP, everything else we install is TCP.
+type FirewallProto string
+
+const (
+	FirewallTCP    FirewallProto = "tcp"
+	FirewallUDP    FirewallProto = "udp"
+	FirewallTCPUDP FirewallProto = "tcp+udp"
+)
+
+// PrintFirewallHint detects the active firewall (UFW or firewalld) and
+// prints copy-paste commands to open the listening port. We deliberately
+// do NOT execute these — modifying iptables without explicit consent has
+// burned too many people; surfacing the commands lets the user decide.
+func PrintFirewallHint(port int, proto FirewallProto) {
+	fmt.Println()
+	fmt.Printf("%s防火墙提示:%s 服务监听端口 %d 需要对外开放。\n", utils.ColorCyan, utils.ColorReset, port)
+
+	if commandExists("ufw") {
+		fmt.Printf("  检测到 UFW，可执行：\n")
+		switch proto {
+		case FirewallUDP:
+			fmt.Printf("    sudo ufw allow %d/udp\n", port)
+		case FirewallTCPUDP:
+			fmt.Printf("    sudo ufw allow %d/tcp\n", port)
+			fmt.Printf("    sudo ufw allow %d/udp\n", port)
+		default:
+			fmt.Printf("    sudo ufw allow %d/tcp\n", port)
+		}
+	} else if commandExists("firewall-cmd") {
+		fmt.Printf("  检测到 firewalld，可执行：\n")
+		switch proto {
+		case FirewallUDP:
+			fmt.Printf("    sudo firewall-cmd --add-port=%d/udp --permanent\n", port)
+		case FirewallTCPUDP:
+			fmt.Printf("    sudo firewall-cmd --add-port=%d/tcp --permanent\n", port)
+			fmt.Printf("    sudo firewall-cmd --add-port=%d/udp --permanent\n", port)
+		default:
+			fmt.Printf("    sudo firewall-cmd --add-port=%d/tcp --permanent\n", port)
+		}
+		fmt.Printf("    sudo firewall-cmd --reload\n")
+	} else {
+		fmt.Printf("  未检测到 UFW/firewalld。如使用云厂商安全组，请记得放行端口 %d (%s)。\n", port, proto)
+	}
+}

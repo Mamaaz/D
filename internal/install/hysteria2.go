@@ -165,6 +165,7 @@ func InstallHysteria2() (*InstallResult, error) {
 	}
 
 	printHysteria2Success(config, surgeProxy)
+	PrintFirewallHint(config.Port, FirewallUDP) // Hysteria2 is QUIC over UDP
 
 	return result, nil
 }

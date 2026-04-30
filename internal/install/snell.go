@@ -156,6 +156,7 @@ func InstallSnell() (*InstallResult, error) {
 	}
 
 	printSnellSuccess(config, surgeProxy)
+	PrintFirewallHint(config.ShadowTLSPort, FirewallTCP)
 
 	return result, nil
 }
@@ -280,10 +281,13 @@ func createSnellServices(cfg SnellConfig) error {
 		ShadowTLSBinaryPath, cfg.ShadowTLSPort, cfg.SnellPort, cfg.TLSDomain, cfg.ShadowTLSPassword,
 	)
 
+	// CAP_NET_BIND_SERVICE lets the snell user bind low ports without root.
+	// Reuse the snell system user so this service inherits the same isolation
+	// as snell-server itself — they're a pair.
 	return CreateSystemdService(SystemdServiceConfig{
 		Name:         "shadow-tls",
 		Description:  "Shadow-TLS Server",
-		User:         "root",
+		User:         "snell",
 		ExecStart:    shadowTLSCmd,
 		Capabilities: "CAP_NET_BIND_SERVICE",
 	})
