@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
@@ -150,6 +151,7 @@ func InstallHysteria2() (*InstallResult, error) {
 
 	// 保存配置
 	saveHysteria2Config(config)
+	upsertNode(storeNodeFromHysteria2(config))
 
 	// 生成客户端配置
 	surgeProxy := generateHysteria2SurgeProxy(config)
@@ -454,6 +456,7 @@ func UninstallHysteria2() error {
 
 	os.RemoveAll(Hysteria2ConfigDir)
 	os.Remove(Hysteria2ProxyConfigPath)
+	removeNodeByType(store.TypeHysteria2)
 
 	utils.DeleteSystemUser("hysteria2")
 
