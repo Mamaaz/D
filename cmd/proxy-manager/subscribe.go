@@ -11,6 +11,7 @@ import (
 
 	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/subscribe"
+	"github.com/mdp/qrterminal/v3"
 )
 
 // runSubscribe dispatches `proxy-manager subscribe <command>`.
@@ -251,6 +252,29 @@ func printURLs(urls map[string]string) {
 			fmt.Printf("  %-8s %s\n", k+":", v)
 		}
 	}
+	// QR for the JSON URL — that's the one Mac client and most subscription
+	// readers consume. Surge can subscribe by pasting the surge URL by hand.
+	if json, ok := urls["json"]; ok {
+		fmt.Println()
+		fmt.Println("  扫码导入 (json):")
+		printQR(json)
+	}
+}
+
+// printQR renders an ASCII QR for the URL using qrterminal. Compact output
+// (HALFBLOCK) keeps the QR fitting in a typical 80-col terminal.
+func printQR(text string) {
+	cfg := qrterminal.Config{
+		Level:     qrterminal.M,
+		Writer:    os.Stdout,
+		HalfBlocks: true,
+		BlackChar: qrterminal.BLACK_BLACK,
+		WhiteChar: qrterminal.WHITE_WHITE,
+		BlackWhiteChar: qrterminal.BLACK_WHITE,
+		WhiteBlackChar: qrterminal.WHITE_BLACK,
+		QuietZone: 1,
+	}
+	qrterminal.GenerateWithConfig(text, cfg)
 }
 
 // randomPort returns an int in [10000, 65000] suitable as a default

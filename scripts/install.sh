@@ -176,7 +176,11 @@ download_binary() {
         if [ "$size" -gt 1000000 ]; then  # 至少 1MB
             mv "$temp_file" "${INSTALL_DIR}/${BINARY_NAME}"
             chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-            log_success "二进制文件下载成功"
+            # Short alias so users don't have to type the full name. Symlink
+            # rather than copy so a future binary upgrade picks it up
+            # automatically.
+            ln -sf "${INSTALL_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/pm"
+            log_success "二进制文件下载成功 (短别名: pm)"
             return 0
         else
             log_error "下载的文件太小，可能下载失败"
@@ -413,10 +417,11 @@ do_uninstall() {
     rm -f /etc/systemd/system/proxy-health.timer
     timeout 10 systemctl daemon-reload 2>/dev/null || true
     
-    # 删除二进制文件和配置
+    # 删除二进制文件、短别名、配置
     rm -f "${INSTALL_DIR}/${BINARY_NAME}"
+    rm -f "${INSTALL_DIR}/pm"
     rm -rf "${CONFIG_DIR}"
-    
+
     log_success "Proxy Manager 已卸载"
 }
 
