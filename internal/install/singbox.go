@@ -143,6 +143,7 @@ func InstallSingbox() (*InstallResult, error) {
 	}
 
 	printSingboxSuccess(config, surgeProxy)
+	PrintFirewallHint(config.ShadowTLSPort, FirewallTCP)
 
 	return result, nil
 }
@@ -209,14 +210,7 @@ func selectSSMethod() string {
 	}
 	fmt.Println()
 
-	var choice int
-	fmt.Print("请选择 (默认: 1): ")
-	fmt.Scanln(&choice)
-
-	if choice < 1 || choice > len(SS2022Methods) {
-		choice = 1
-	}
-
+	choice := utils.PromptInt("请选择", 1, 1, len(SS2022Methods))
 	return SS2022Methods[choice-1]
 }
 
