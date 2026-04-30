@@ -1,6 +1,7 @@
 package install
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
@@ -120,6 +122,7 @@ func InstallReality() (*InstallResult, error) {
 
 	// 保存配置
 	saveRealityConfig(config)
+	upsertNode(storeNodeFromReality(config))
 
 	// 生成客户端配置
 	surgeProxy := fmt.Sprintf(
@@ -179,11 +182,48 @@ func selectRealityServerName() string {
 func generateUUID() string {
 	cmd := exec.Command(SingboxBinaryPath, "generate", "uuid")
 	output, err := cmd.Output()
-	if err != nil {
-		// 使用简单的 UUID 生成
-		return utils.GeneratePassword(32)
+	if err == nil {
+		s := strings.TrimSpace(string(output))
+		if isValidUUID(s) {
+			return s
+		}
 	}
-	return strings.TrimSpace(string(output))
+	return generateRandomUUIDv4()
+}
+
+// generateRandomUUIDv4 produces a RFC 4122 v4 UUID using crypto/rand. We
+// avoid pulling google/uuid as a dep since this is the only consumer.
+func generateRandomUUIDv4() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand failure on Linux is essentially unreachable; if it
+		// somehow happens, fail loud rather than emit garbage that sing-box
+		// will reject at startup.
+		panic("crypto/rand unavailable: " + err.Error())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant RFC 4122
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func isValidUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func generateRealityKeyPair() (string, string) {
@@ -418,6 +458,7 @@ func UninstallReality() error {
 
 	os.RemoveAll(RealityConfigDir)
 	os.Remove(RealityProxyConfigPath)
+	removeNodeByType(store.TypeVLESSReality)
 
 	// 如果没有其他服务使用 sing-box，删除二进制和用户
 	if !IsSingboxShared(RealityProxyConfigPath) {

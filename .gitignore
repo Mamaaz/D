@@ -1,0 +1,12 @@
+# Build artifacts go to GitHub Releases, not the repo.
+/dist/
+*.bin
+*.exe
+
+# Local Go cache / module download (when working out-of-tree).
+/vendor/
+
+# IDEs and OS noise.
+.idea/
+.vscode/
+.DS_Store

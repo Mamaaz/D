@@ -23,6 +23,9 @@ func main() {
 		case "update":
 			doUpdate()
 			return
+		case "export":
+			runExport(os.Args[2:])
+			return
 		case "--action":
 			// 执行指定操作 (由 TUI 调用)
 			if len(os.Args) > 2 {
@@ -75,6 +78,8 @@ func showHelp() {
   proxy-manager --help       显示此帮助信息
   proxy-manager --version    显示版本信息
   proxy-manager update       更新到最新版
+  proxy-manager export --format=<json|surge|clash|singbox|xray>
+                             导出已安装节点为指定格式 (输出到 stdout)
 
 支持的协议:
   - Snell + Shadow-TLS

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
@@ -125,6 +126,7 @@ func InstallSingbox() (*InstallResult, error) {
 
 	// 保存配置
 	saveSingboxConfig(config)
+	upsertNode(storeNodeFromSingbox(config))
 
 	// 生成客户端配置
 	surgeProxy := fmt.Sprintf(
@@ -432,6 +434,7 @@ func UninstallSingbox() error {
 	// 删除配置
 	os.RemoveAll(SingboxConfigDir)
 	os.Remove(SingboxProxyConfigPath)
+	removeNodeByType(store.TypeSS2022ShadowTLS)
 
 	// 如果没有其他服务使用 sing-box，删除二进制和用户
 	if !IsSingboxShared(SingboxProxyConfigPath) {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
@@ -131,6 +132,7 @@ func InstallSnell() (*InstallResult, error) {
 
 	// 保存配置
 	saveSnellConfig(config)
+	upsertNode(storeNodeFromSnell(config))
 
 	// 生成客户端配置
 	surgeProxy := fmt.Sprintf(
@@ -485,6 +487,7 @@ func UninstallSnell() error {
 	os.Remove(ShadowTLSBinaryPath)
 	os.RemoveAll("/etc/snell")
 	os.Remove(SnellProxyConfigPath)
+	removeNodeByType(store.TypeSnellShadowTLS)
 
 	// 删除用户
 	utils.DeleteSystemUser("snell")
