@@ -32,6 +32,10 @@ func main() {
 		case "doctor":
 			runDoctor(os.Args[2:])
 			return
+		case "service-rebuild":
+			checkRoot()
+			runServiceRebuild(os.Args[2:])
+			return
 		case "--action":
 			// 执行指定操作 (由 TUI 调用)
 			if len(os.Args) > 2 {
@@ -90,6 +94,9 @@ func showHelp() {
                              订阅 HTTPS 服务: enable / disable / status / url / rotate-token
                              (详细: proxy-manager subscribe --help)
   proxy-manager doctor       一键诊断: 协议服务/证书/订阅服务状态
+  proxy-manager service-rebuild
+                             重建所有已安装协议的 systemd 单元
+                             (升级二进制后用，让 unit 文件改动生效)
 
 支持的协议:
   - Snell + Shadow-TLS

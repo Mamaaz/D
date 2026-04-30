@@ -172,21 +172,60 @@ func readCert(path string) (*x509.Certificate, error) {
 	return nil, fmt.Errorf("未找到 CERTIFICATE PEM block")
 }
 
-// printAutocertCert finds the most recent cert in the autocert cache for
-// the given domain and reports expiry. autocert's cache uses the bare domain
-// name as the filename, no extension.
+// printAutocertCert reports the expiry of the autocert-managed certificate
+// for the given domain. autocert's filename scheme has shifted across
+// versions (bare `<domain>`, `<domain>+rsa`, sometimes hashed suffixes),
+// so we scan the cache directory for any file containing the domain in
+// its name and pick the newest one that decodes as a valid PEM cert.
 func printAutocertCert(domain string) {
-	candidates := []string{
-		filepath.Join(subscribe.CertCacheDir, domain),
-		filepath.Join(subscribe.CertCacheDir, domain+"+rsa"),
+	entries, err := os.ReadDir(subscribe.CertCacheDir)
+	if err != nil {
+		fmt.Printf("    证书: 尚未签发 (autocert 在首次请求时自动签)\n")
+		return
 	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			printCertExpiry(p, "    ")
+	type candidate struct {
+		path    string
+		modTime time.Time
+	}
+	var matches []candidate
+	for _, e := range entries {
+		if e.IsDir() || !strings.Contains(e.Name(), domain) {
+			continue
+		}
+		fi, err := e.Info()
+		if err != nil {
+			continue
+		}
+		matches = append(matches, candidate{
+			path:    filepath.Join(subscribe.CertCacheDir, e.Name()),
+			modTime: fi.ModTime(),
+		})
+	}
+	if len(matches) == 0 {
+		fmt.Printf("    证书: 尚未签发 (autocert 在首次请求时自动签)\n")
+		return
+	}
+	// Newest first — typical when autocert renews and leaves an older copy
+	// behind. We only report the freshest one.
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].modTime.After(matches[j].modTime)
+	})
+	for _, c := range matches {
+		if cert, err := readCert(c.path); err == nil && cert != nil {
+			left := time.Until(cert.NotAfter)
+			days := int(left.Hours() / 24)
+			switch {
+			case days < 0:
+				fmt.Printf("    证书: %s 已过期 %d 天前%s\n", utils.ColorRed, -days, utils.ColorReset)
+			case days < 14:
+				fmt.Printf("    证书: %s%d 天后过期%s — 即将续约\n", utils.ColorYellow, days, utils.ColorReset)
+			default:
+				fmt.Printf("    证书: %s%d 天后过期%s\n", utils.ColorGreen, days, utils.ColorReset)
+			}
 			return
 		}
 	}
-	fmt.Printf("    证书: 尚未签发 (autocert 在首次请求时自动签)\n")
+	fmt.Printf("    证书: 缓存目录有 %d 个匹配文件但都不是 PEM (autocert 可能用了未识别的格式)\n", len(matches))
 }
 
 // --- misc -----------------------------------------------------------------
