@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 
+	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
@@ -177,6 +178,7 @@ func InstallAnyTLS() (*InstallResult, error) {
 
 	// 保存配置
 	saveAnyTLSConfig(config)
+	upsertNode(storeNodeFromAnyTLS(config))
 
 	// 生成客户端配置
 	surgeProxy := fmt.Sprintf(
@@ -470,6 +472,7 @@ func UninstallAnyTLS() error {
 
 	os.RemoveAll(AnyTLSConfigDir)
 	os.Remove(AnyTLSProxyConfigPath)
+	removeNodeByType(store.TypeAnyTLS)
 
 	utils.DeleteSystemUser("anytls")
 
