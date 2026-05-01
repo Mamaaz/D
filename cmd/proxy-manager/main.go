@@ -36,6 +36,9 @@ func main() {
 		case "sni-test":
 			runSNITest(os.Args[2:])
 			return
+		case "edit":
+			runEdit(os.Args[2:])
+			return
 		case "service-rebuild":
 			checkRoot()
 			runServiceRebuild(os.Args[2:])
@@ -100,6 +103,8 @@ func showHelp() {
   proxy-manager doctor       一键诊断: 协议服务/证书/订阅服务状态
   proxy-manager sni-test <host>
                              从 VPS 视角验证候选 Reality SNI: TLS1.3/X25519/h2/证书
+  proxy-manager edit         修改已安装协议的可变字段 (MVP: VLESS Reality 的
+                             port / uuid / short-id / sni)
   proxy-manager service-rebuild
                              重建所有已安装协议的 systemd 单元
                              (升级二进制后用，让 unit 文件改动生效)
