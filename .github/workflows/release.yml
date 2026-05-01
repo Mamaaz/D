@@ -49,7 +49,7 @@ jobs:
         run: |
           go build \
             -trimpath \
-            -ldflags "-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -ldflags "-s -w -X github.com/Mamaaz/proxy-manager/internal/version.Version=${{ steps.version.outputs.VERSION }}" \
             -o proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }} \
             ./cmd/proxy-manager
           ls -la proxy-manager-*

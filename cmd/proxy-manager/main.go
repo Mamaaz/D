@@ -6,10 +6,12 @@ import (
 	"os/exec"
 
 	"github.com/Mamaaz/proxy-manager/internal/ui"
+	"github.com/Mamaaz/proxy-manager/internal/version"
 )
 
-// 编译时由 -ldflags "-X main.version=<tag>" 注入。本地未注入时显示 dev。
-var version = "dev"
+// 注：版本号实际定义在 internal/version 包；这里 alias 一下方便就近用。
+// CI ldflags 注入 internal/version.Version (见 .github/workflows/release.yml)。
+// 本地未注入时显示 "dev"。
 
 func main() {
 	// 处理命令行参数
@@ -19,7 +21,7 @@ func main() {
 			showHelp()
 			return
 		case "--version", "-v":
-			fmt.Printf("Proxy Manager v%s\n", version)
+			fmt.Printf("Proxy Manager v%s\n", version.Version)
 			return
 		case "update":
 			doUpdate()
@@ -132,7 +134,7 @@ func showHelp() {
 安装命令:
   bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
 
-`, version)
+`, version.Version)
 }
 
 func doUpdate() {
