@@ -103,7 +103,7 @@ func showHelp() {
   proxy-manager --help       显示此帮助信息
   proxy-manager --version    显示版本信息
   proxy-manager update       更新到最新版
-  proxy-manager export --format=<json|surge|clash|singbox|xray>
+  proxy-manager export --format=<json|surge|clash|mihomo|singbox|xray|qx>
                              导出已安装节点为指定格式 (输出到 stdout)
   proxy-manager subscribe <command>
                              订阅 HTTPS 服务: enable / disable / status / url / rotate-token

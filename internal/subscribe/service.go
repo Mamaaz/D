@@ -243,7 +243,7 @@ func Urls(s *store.Store) map[string]string {
 		base = fmt.Sprintf("https://%s:%d", s.Subscribe.Domain, s.Subscribe.Port)
 	}
 	out := map[string]string{}
-	for _, f := range []string{"surge", "clash", "singbox", "xray", "json"} {
+	for _, f := range []string{"surge", "clash", "mihomo", "singbox", "xray", "qx", "json"} {
 		out[f] = fmt.Sprintf("%s/s/%s/%s", base, f, s.Subscribe.Token)
 	}
 	return out

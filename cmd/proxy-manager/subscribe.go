@@ -247,7 +247,7 @@ func emptyDash(s string) string {
 }
 
 func printURLs(urls map[string]string) {
-	for _, k := range []string{"surge", "clash", "singbox", "xray", "json"} {
+	for _, k := range []string{"surge", "clash", "mihomo", "singbox", "xray", "qx", "json"} {
 		if v, ok := urls[k]; ok {
 			fmt.Printf("  %-8s %s\n", k+":", v)
 		}

@@ -82,6 +82,27 @@ func ToXray(n *store.Node) ([]map[string]any, error) {
 	return nil, fmt.Errorf("%w: xray only renders vless-reality (use surge/sing-box for %q)", ErrUnsupportedFormat, n.Type)
 }
 
+// ToQX returns one QuantumultX server_local 配置行 (no trailing newline)。
+//
+// QX 是 iOS 上跟 Surge 并列的主流代理 app，原生支持 VLESS Reality (Surge iOS
+// 至今不支持)，所以 QX format 对 iOS Reality 用户是必需的。每协议字段名跟
+// Surge / Clash / sing-box 都不同，单独实现。
+func ToQX(n *store.Node) (string, error) {
+	switch n.Type {
+	case store.TypeSnellShadowTLS:
+		return snellToQX(n), nil
+	case store.TypeSS2022ShadowTLS:
+		return ss2022ToQX(n), nil
+	case store.TypeVLESSReality:
+		return vlessRealityToQX(n), nil
+	case store.TypeHysteria2:
+		return hysteria2ToQX(n), nil
+	case store.TypeAnyTLS:
+		return anytlsToQX(n), nil
+	}
+	return "", fmt.Errorf("%w: %q", ErrUnknownNodeType, n.Type)
+}
+
 // NeedsBridge reports whether a node must be reached via a local proxy bridge
 // (xray) to be usable by Surge. Currently only VLESS-Reality.
 func NeedsBridge(n *store.Node) bool {
