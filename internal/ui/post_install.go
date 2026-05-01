@@ -4,11 +4,46 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Mamaaz/proxy-manager/internal/format"
 	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/subscribe"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 	"github.com/mdp/qrterminal/v3"
 )
+
+// printNodeShareURL 给一个新装的节点打分享 URL + QR。客户端扫码即导入
+// 单个节点，不依赖订阅服务（测试用、或 subscribe 还没启用时）。
+//
+// 当前只支持 VLESS Reality (`vless://...`)。其他协议的标准 share URL 格式
+// 各异 (Snell 没标准、SS-2022 是 `ss://` 但 ShadowTLS 层无法编码、Hy2 是
+// `hy2://`、AnyTLS 没标准) — 待真有需求再加。
+func printNodeShareURL(nodeType store.NodeType) {
+	s, err := store.LoadOrMigrate()
+	if err != nil {
+		return
+	}
+	var node *store.Node
+	for i := range s.Nodes {
+		if s.Nodes[i].Type == nodeType {
+			node = &s.Nodes[i]
+			break
+		}
+	}
+	if node == nil {
+		return
+	}
+	if nodeType != store.TypeVLESSReality {
+		return // 其他协议暂未实现 share URL
+	}
+	share := format.VlessRealityShareURL(node)
+	fmt.Println()
+	fmt.Printf("%s单节点分享链接%s（扫码导入到任意 Reality 客户端，不需要订阅服务）:\n",
+		utils.ColorCyan, utils.ColorReset)
+	fmt.Printf("  %s%s%s\n", utils.ColorGreen, share, utils.ColorReset)
+	fmt.Println()
+	fmt.Println("  扫码:")
+	printQR(share)
+}
 
 // printSubscribeURLs 在协议安装成功后打印订阅 URL（如果订阅服务已启用）。
 // 让用户安装完直接看到给 XSurge / Surge / Clash / sing-box / xray 用的 5 种

@@ -2,9 +2,44 @@ package format
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/Mamaaz/proxy-manager/internal/store"
 )
+
+// VlessRealityShareURL 生成单节点 vless:// 分享 URL，标准格式 (xray/v2ray
+// 客户端通用)。可以 QR 编码后扫码导入到 NekoBox / V2Box / sing-box-windows
+// 等任意 Reality 客户端，不依赖订阅服务。
+//
+// 格式参考: https://github.com/XTLS/Xray-core/discussions/716
+//
+//	vless://<uuid>@<host>:<port>?
+//	  encryption=none&flow=xtls-rprx-vision&
+//	  type=tcp&security=reality&
+//	  pbk=<publickey>&sni=<servername>&sid=<shortid>&
+//	  fp=chrome&spx=%2F
+//	  #<urlencoded-name>
+func VlessRealityShareURL(n *store.Node) string {
+	p := n.Params
+	q := url.Values{}
+	q.Set("encryption", "none")
+	if flow := str(p, "flow"); flow != "" {
+		q.Set("flow", flow)
+	}
+	q.Set("type", "tcp")
+	q.Set("security", "reality")
+	q.Set("pbk", str(p, "public_key"))
+	q.Set("sni", str(p, "server_name"))
+	q.Set("sid", str(p, "short_id"))
+	q.Set("fp", "chrome")
+	q.Set("spx", "/")
+	return fmt.Sprintf("vless://%s@%s:%d?%s#%s",
+		str(p, "uuid"),
+		n.Server, n.Port,
+		q.Encode(),
+		url.QueryEscape(n.Name),
+	)
+}
 
 // vlessRealityToSurge emits Surge's documented vless-reality syntax. Surge's
 // official VLESS Reality support is recent and field names may shift; if your

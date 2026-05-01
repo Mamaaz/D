@@ -9,6 +9,7 @@ import (
 
 	"github.com/Mamaaz/proxy-manager/internal/install"
 	"github.com/Mamaaz/proxy-manager/internal/services"
+	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -264,6 +265,7 @@ func doInstallReality() {
 	if err != nil {
 		utils.PrintError("安装失败: %v", err)
 	} else {
+		printNodeShareURL(store.TypeVLESSReality)
 		printSubscribeURLs()
 	}
 	waitForEnter()
