@@ -1,4 +1,6 @@
-package main
+// Package sni 提供 Reality SNI 候选探测 + 批量打分排序。CLI (sni-test /
+// sni-rank) 和 TUI 菜单都从这里调，避免逻辑重复。
+package sni
 
 import (
 	"crypto/tls"
@@ -10,23 +12,23 @@ import (
 	"time"
 )
 
-// SNIProbeResult 是单个 host 的探测结果。结构化输出，单点 sni-test 直接渲染，
+// ProbeResult 是单个 host 的探测结果。结构化输出，单点 sni-test 直接渲染，
 // 批量 sni-rank 用来排序+打分。
-type SNIProbeResult struct {
-	Host       string
+type ProbeResult struct {
+	Host        string
 	ResolvedIPs []string
-	DNSError   error
+	DNSError    error
 
-	TLSVersion uint16 // tls.VersionTLS13 等
-	Cipher     uint16
-	X25519     bool // forced by config; true iff handshake succeeded with that constraint
-	ALPN       string
-	HandshakeMs int
+	TLSVersion   uint16 // tls.VersionTLS13 等
+	Cipher       uint16
+	X25519       bool
+	ALPN         string
+	HandshakeMs  int
 	HandshakeErr error
 
-	CertVerified bool
-	CertCN       string
-	CertSANs     []string
+	CertVerified      bool
+	CertCN            string
+	CertSANs          []string
 	CertExpiresInDays int
 
 	HTTPStatus int
@@ -35,15 +37,13 @@ type SNIProbeResult struct {
 	HTTPErr    error
 }
 
-// Suitable 等同于现有 sni-test 的判定标准：TLS 1.3 + cert verified。h2 加分但
-// 不强求。HTTP 错误不算硬失败 (有些 host 故意 405/500 head 但 Reality 用得了)。
-func (r *SNIProbeResult) Suitable() bool {
+// Suitable 等同于现有 sni-test 的判定：TLS 1.3 + cert verified。h2 加分但不强求。
+func (r *ProbeResult) Suitable() bool {
 	return r.HandshakeErr == nil && r.TLSVersion == tls.VersionTLS13 && r.CertVerified
 }
 
-// IsCDN 用 Server header 启发式判断是否是常见 CDN。Reality 协议建议避开 CDN
-// 因为 CDN 节点 IP 不固定，对 Reality 的 IP-routing 假设不友好。
-func (r *SNIProbeResult) IsCDN() bool {
+// IsCDN 用 Server header 启发式判断常见 CDN。Reality 协议建议避开 CDN。
+func (r *ProbeResult) IsCDN() bool {
 	if r.Server == "" {
 		return false
 	}
@@ -56,12 +56,11 @@ func (r *SNIProbeResult) IsCDN() bool {
 	return false
 }
 
-// probeSNI 跑一次完整探测。失败/部分失败也返回 result，由调用方决定如何渲染。
-// hardTimeout 控制整体 budget (DNS + TLS + HTTP)；超过会留半成品 result。
-func probeSNI(host string, hardTimeout time.Duration) *SNIProbeResult {
-	r := &SNIProbeResult{Host: host}
+// Probe 跑一次完整探测：DNS → TLS 1.3 + X25519 握手 → ALPN → 证书 → HTTP HEAD。
+// 失败/部分失败也返回 result，由调用方决定如何渲染。
+func Probe(host string, hardTimeout time.Duration) *ProbeResult {
+	r := &ProbeResult{Host: host}
 
-	// 1) DNS
 	addrs, err := net.LookupHost(host)
 	if err != nil {
 		r.DNSError = err
@@ -69,7 +68,6 @@ func probeSNI(host string, hardTimeout time.Duration) *SNIProbeResult {
 	}
 	r.ResolvedIPs = addrs
 
-	// 2) TLS 握手
 	dialer := &net.Dialer{Timeout: hardTimeout}
 	cfg := &tls.Config{
 		ServerName:       host,
@@ -92,17 +90,14 @@ func probeSNI(host string, hardTimeout time.Duration) *SNIProbeResult {
 	r.X25519 = (state.Version == tls.VersionTLS13)
 	r.ALPN = state.NegotiatedProtocol
 
-	// 证书校验：tls.Dial 已经 verify 过（没 InsecureSkipVerify），但显式跑一次
-	// 拿到详细信息 (CN/SAN/expiry) 喂给 ranking。
 	if len(state.PeerCertificates) > 0 {
-		r.CertVerified = verifySNIChain(state.PeerCertificates, host)
+		r.CertVerified = verifyChain(state.PeerCertificates, host)
 		c := state.PeerCertificates[0]
 		r.CertCN = c.Subject.CommonName
 		r.CertSANs = c.DNSNames
 		r.CertExpiresInDays = int(time.Until(c.NotAfter).Hours() / 24)
 	}
 
-	// 3) HTTP HEAD
 	httpStart := time.Now()
 	resp, herr := httpHEAD("https://" + host + "/")
 	r.HTTPRTTMs = int(time.Since(httpStart).Milliseconds())
@@ -116,7 +111,7 @@ func probeSNI(host string, hardTimeout time.Duration) *SNIProbeResult {
 	return r
 }
 
-func verifySNIChain(chain []*x509.Certificate, hostname string) bool {
+func verifyChain(chain []*x509.Certificate, hostname string) bool {
 	if len(chain) == 0 {
 		return false
 	}
@@ -147,4 +142,3 @@ func httpHEAD(url string) (*http.Response, error) {
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return resp, nil
 }
-

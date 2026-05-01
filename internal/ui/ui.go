@@ -228,6 +228,8 @@ func ExecuteAction(action string) {
 		doUpdatePM()
 	case "uninstall_pm":
 		doUninstallPM()
+	case "rank_sni":
+		doRankSNI()
 	default:
 		utils.PrintError("未知操作: %s", action)
 	}
@@ -540,7 +542,7 @@ func RunSimpleMenu() {
 		showStatus()
 		showMenu()
 
-		choice := utils.PromptInt("请选择", 0, 0, 13)
+		choice := utils.PromptInt("请选择", 0, 0, 14)
 
 		switch choice {
 		case 1:
@@ -569,6 +571,8 @@ func RunSimpleMenu() {
 			doUpdatePM()
 		case 13:
 			doUninstallPM()
+		case 14:
+			doRankSNI()
 		case 0:
 			fmt.Println("再见！")
 			return
@@ -661,6 +665,11 @@ func showMenu() {
 	fmt.Printf("%s│%s    %s10.%s 续签证书 (Hysteria2/AnyTLS)                         %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s    %s11.%s 查看证书状态                                        %s│%s\n",
+		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s│%s  %sReality SNI 工具%s                                         %s│%s\n",
+		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s│%s    %s14.%s Reality SNI 候选评估 (粘贴扫描结果一键挑最佳)        %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s系统管理%s                                                 %s│%s\n",
