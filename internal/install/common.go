@@ -178,15 +178,19 @@ func loadOrPromptCloudflareToken() (string, error) {
 }
 
 // InstallCertForService 安装证书到指定服务目录
+//
+// 历史 bug：之前用 utils.GetDefaultGroup() 返回 "nogroup"/"nobody"，但
+// CreateSystemUser(svc) 建的用户主组是同名 (svc:svc)。chown svc:nogroup
+// 在没有 nogroup 的发行版静默失败 → 证书留 root:root → 服务读不了 key
+// FATAL "permission denied"。改用 serviceName 同时作 owner + group。
 func InstallCertForService(domain, serviceName, keyPath, certPath string) error {
 	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
-	defaultGroup := utils.GetDefaultGroup()
 
 	cmd := exec.Command(acmePath, "--install-cert", "-d", domain, "--ecc",
 		"--key-file", keyPath,
 		"--fullchain-file", certPath,
 		"--reloadcmd", fmt.Sprintf("chown %s:%s %s %s && chmod 600 %s && chmod 644 %s && systemctl restart %s 2>/dev/null || true",
-			serviceName, defaultGroup, keyPath, certPath, keyPath, certPath, serviceName))
+			serviceName, serviceName, keyPath, certPath, keyPath, certPath, serviceName))
 
 	if err := cmd.Run(); err != nil {
 		return err
@@ -196,8 +200,8 @@ func InstallCertForService(domain, serviceName, keyPath, certPath string) error 
 	os.Chmod(keyPath, PermKeyFile)
 	os.Chmod(certPath, PermCertFile)
 
-	// 设置正确的所有权
-	chownCmd := exec.Command("chown", fmt.Sprintf("%s:%s", serviceName, defaultGroup), keyPath, certPath)
+	// chown serviceName:serviceName (CreateSystemUser 创建的同名 group)
+	chownCmd := exec.Command("chown", fmt.Sprintf("%s:%s", serviceName, serviceName), keyPath, certPath)
 	if err := chownCmd.Run(); err != nil {
 		utils.PrintWarn("设置证书所有权失败: %v", err)
 	}
