@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/Mamaaz/proxy-manager/internal/ui"
 	"github.com/Mamaaz/proxy-manager/internal/version"
@@ -138,17 +141,52 @@ func doUpdate() {
 	fmt.Println("正在检查更新...")
 	fmt.Println()
 
-	// 构建安装脚本 URL
-	installURL := "https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh"
+	const installURL = "https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh"
 
-	// 使用 bash 执行更新脚本
-	cmd := exec.Command("bash", "-c", fmt.Sprintf("curl -sL '%s' | bash -s update", installURL))
+	// 不能用 `curl ... | bash -s update`:install.sh `set -e` + 里面 `read -p`
+	// 在管道模式下 stdin 已被脚本本体占用,read 直接拿到 EOF 返回 1,set -e
+	// 让脚本在确认提示那行立即终止 → 用户看到 "exit status 1" 没解释。
+	// 改成: 先把脚本下到 tmpfile,再 `bash tmpfile update`,os.Stdin 仍是终端,
+	// 交互 read 能正常工作。
+	scriptPath, err := downloadToTemp(installURL)
+	if err != nil {
+		fmt.Printf("下载更新脚本失败: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.Remove(scriptPath)
+
+	cmd := exec.Command("bash", scriptPath, "update")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("更新失败: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func downloadToTemp(url string) (string, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	f, err := os.CreateTemp("", "proxy-manager-update-*.sh")
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
