@@ -69,7 +69,7 @@ func printSubscribeURLs() {
 	fmt.Println()
 	fmt.Printf("%s订阅 URL%s（客户端添加这些 URL 即可自动同步配置）:\n",
 		utils.ColorCyan, utils.ColorReset)
-	for _, k := range []string{"surge", "clash", "singbox", "xray", "json"} {
+	for _, k := range []string{"surge", "clash", "mihomo", "singbox", "xray", "qx", "json"} {
 		if v, ok := urls[k]; ok {
 			fmt.Printf("  %-8s %s\n", k+":", v)
 		}

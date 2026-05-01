@@ -28,7 +28,7 @@ func runExport(args []string) {
 		case strings.HasPrefix(a, "--format="):
 			formatName = strings.TrimPrefix(a, "--format=")
 		case a == "-h" || a == "--help":
-			fmt.Println("Usage: proxy-manager export [--format=json|surge|clash|singbox|xray]")
+			fmt.Println("Usage: proxy-manager export [--format=json|surge|clash|mihomo|singbox|xray|qx]")
 			return
 		default:
 			fmt.Fprintf(os.Stderr, "未知参数: %s\n", a)
@@ -59,14 +59,28 @@ func writeFormat(w io.Writer, name string, s *store.Store) error {
 		return writeJSON(w, s)
 	case "surge":
 		return writeSurge(w, s)
-	case "clash":
+	case "clash", "mihomo":
 		return writeClash(w, s)
 	case "singbox", "sing-box":
 		return writeSingbox(w, s)
 	case "xray":
 		return writeXray(w, s)
+	case "qx", "quantumultx":
+		return writeQX(w, s)
 	}
-	return fmt.Errorf("未知格式: %s (支持: json, surge, clash, singbox, xray)", name)
+	return fmt.Errorf("未知格式: %s (支持: json, surge, clash, mihomo, singbox, xray, qx)", name)
+}
+
+func writeQX(w io.Writer, s *store.Store) error {
+	for _, n := range s.Nodes {
+		line, err := format.ToQX(&n)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  # skip %s: %v\n", n.ID, err)
+			continue
+		}
+		fmt.Fprintln(w, line)
+	}
+	return nil
 }
 
 func writeJSON(w io.Writer, s *store.Store) error {

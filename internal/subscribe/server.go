@@ -98,7 +98,9 @@ func writeFormat(w http.ResponseWriter, name string, s *store.Store) error {
 			fmt.Fprintln(w, line)
 		}
 		return nil
-	case "clash":
+	case "clash", "mihomo":
+		// Mihomo (formerly Clash.Meta) is the active fork; it accepts standard
+		// Clash YAML/JSON. Same handler — alias for discoverability.
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		proxies := make([]map[string]any, 0, len(s.Nodes))
 		for _, n := range s.Nodes {
@@ -111,6 +113,16 @@ func writeFormat(w http.ResponseWriter, name string, s *store.Store) error {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(map[string]any{"proxies": proxies})
+	case "qx", "quantumultx":
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		for _, n := range s.Nodes {
+			line, err := format.ToQX(&n)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintln(w, line)
+		}
+		return nil
 	case "singbox", "sing-box":
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		outbounds := make([]map[string]any, 0, len(s.Nodes)*2)
@@ -141,7 +153,7 @@ func writeFormat(w http.ResponseWriter, name string, s *store.Store) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(map[string]any{"outbounds": outbounds})
 	}
-	return fmt.Errorf("unknown format: %s (supported: json, surge, clash, singbox, xray)", name)
+	return fmt.Errorf("unknown format: %s (supported: json, surge, clash, mihomo, singbox, xray, qx)", name)
 }
 
 func logMiddleware(next http.Handler) http.Handler {
