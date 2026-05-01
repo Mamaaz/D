@@ -21,13 +21,29 @@ bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.
 每协议独立端口、独立 systemd unit、专属系统用户 + `CAP_NET_BIND_SERVICE`，
 `ProtectSystem=strict` 硬化。
 
-## 核心子命令
+## TUI 主菜单
+
+直接 `proxy-manager` 进交互菜单（推荐入口）：
+
+| # | 功能 |
+| --- | --- |
+| 1-5 | 安装协议（Snell / SS-2022 / Reality / Hysteria2 / AnyTLS） |
+| 6 | 查看服务配置（输出 Surge / Mihomo / QuantumultX 三种格式） |
+| 7-9 | 查看日志 / 更新某协议 / 卸载协议 |
+| 10-11 | 续签证书 / 查看证书状态 |
+| 14 | Reality SNI 候选评估（粘扫描结果一键挑最佳） |
+| **15** | **订阅服务管理（启用 / 停用 / 看 URL / 轮换 token）** |
+| **16** | **一键升级所有内核（xray + sing-box + snell + shadow-tls）** |
+| 12-13 | 升级 / 卸载 proxy-manager 本身 |
+
+## 核心子命令（CLI）
 
 ```
-proxy-manager                       # 默认菜单 (装协议 / 改配置 / SNI 评估)
+proxy-manager                       # 默认菜单
 proxy-manager doctor                # 一键诊断: 协议服务/证书/订阅服务状态
 proxy-manager subscribe enable      # 启用 HTTPS 订阅服务 (autocert)
-proxy-manager subscribe url         # 打印 5 种格式订阅 URL + ASCII QR
+proxy-manager subscribe url         # 打印 7 种格式订阅 URL + ASCII QR
+                                    # (surge/clash/mihomo/singbox/xray/qx/json)
 proxy-manager sni-test <host>       # 单点验证 Reality SNI 候选
 cat scan.csv | proxy-manager sni-rank  # 批量打分排序候选
 proxy-manager edit reality --field sni --value www.apple.com  # 改配置无需重装

@@ -555,7 +555,7 @@ func RunSimpleMenu() {
 		showStatus()
 		showMenu()
 
-		choice := utils.PromptInt("请选择", 0, 0, 14)
+		choice := utils.PromptInt("请选择", 0, 0, 16)
 
 		switch choice {
 		case 1:
@@ -586,6 +586,10 @@ func RunSimpleMenu() {
 			doUninstallPM()
 		case 14:
 			doRankSNI()
+		case 15:
+			doSubscribeMenu()
+		case 16:
+			doKernelUpgradeAll()
 		case 0:
 			fmt.Println("再见！")
 			return
@@ -682,6 +686,13 @@ func showMenu() {
 	fmt.Printf("%s│%s  %sReality SNI 工具%s                                         %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s    %s14.%s Reality SNI 候选评估 (粘贴扫描结果一键挑最佳)        %s│%s\n",
+		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s│%s  %s订阅 / 内核管理%s                                          %s│%s\n",
+		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s│%s    %s15.%s 订阅服务管理 (启用 / 停用 / 查看 URL / 轮换 token)   %s│%s\n",
+		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s│%s    %s16.%s 一键升级所有内核 (xray + sing-box + snell + ...)    %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s系统管理%s                                                 %s│%s\n",
