@@ -2,10 +2,12 @@ package ui
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/subscribe"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
+	"github.com/mdp/qrterminal/v3"
 )
 
 // printSubscribeURLs 在协议安装成功后打印订阅 URL（如果订阅服务已启用）。
@@ -40,4 +42,25 @@ func printSubscribeURLs() {
 	fmt.Println()
 	fmt.Printf("%sXSurge (Mac 状态栏 app)%s 直接添加 json URL 即可。\n",
 		utils.ColorGreen, utils.ColorReset)
+	if json, ok := urls["json"]; ok {
+		fmt.Println()
+		fmt.Println("  扫码导入 (json):")
+		printQR(json)
+	}
+}
+
+// printQR 跟 cmd/proxy-manager/subscribe.go 同款；ui 包独立 import qrterminal
+// 避免循环依赖，代价是几行代码重复——比让 cmd 反过来导出 ui helper 干净。
+func printQR(text string) {
+	cfg := qrterminal.Config{
+		Level:          qrterminal.M,
+		Writer:         os.Stdout,
+		HalfBlocks:     true,
+		BlackChar:      qrterminal.BLACK_BLACK,
+		WhiteChar:      qrterminal.WHITE_WHITE,
+		BlackWhiteChar: qrterminal.BLACK_WHITE,
+		WhiteBlackChar: qrterminal.WHITE_BLACK,
+		QuietZone:      1,
+	}
+	qrterminal.GenerateWithConfig(text, cfg)
 }
