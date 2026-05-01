@@ -159,18 +159,21 @@ get_installed_version() {
 
 # 下载二进制文件
 download_binary() {
-    local version=${1:-$VERSION}
+    # 调用方传 "latest" 或不传 → 用 GitHub 的 /releases/latest/download/ 别名，
+    # 永远拉到最新 release。传具体 v4.0.7 等才用 tag URL。
+    #
+    # 之前 fallback 到硬编码 $VERSION="4.0.0"，但我们没发 v4.0.0 release
+    # (release 从 v4.0.1 开始)，导致旧机器升级时一律返 9 byte "Not Found"。
+    local version=${1:-latest}
     local temp_file=$(mktemp)
 
     log_info "正在下载 ${BINARY_NAME} v${version} (${OS}-${ARCH})..."
 
-    # 优先从 GitHub Release 拉。版本号有则用 tag URL，否则取 latest。
-    # latest 路径是 GitHub 的 302 别名，省去先调 API 的额外往返。
     local download_url
-    if [ -n "$version" ] && [ "$version" != "dev" ]; then
-        download_url="https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/download/v${version}/${BINARY_NAME}-${OS}-${ARCH}"
-    else
+    if [ "$version" = "latest" ] || [ -z "$version" ] || [ "$version" = "dev" ]; then
         download_url="${RELEASE_URL}/${BINARY_NAME}-${OS}-${ARCH}"
+    else
+        download_url="https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/download/v${version}/${BINARY_NAME}-${OS}-${ARCH}"
     fi
     log_info "下载地址: $download_url"
 
@@ -380,7 +383,10 @@ do_update() {
     # 备份旧版本
     cp "${INSTALL_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}.bak" 2>/dev/null || true
     
-    if download_binary "$latest_version"; then
+    # 不传 version → download_binary 用 latest URL；不依赖 $latest_version
+    # 是否被 GitHub API 正确解析 (API 失败 / rate limit 时 $latest_version 可能
+    # 是默认 fallback 值，导致拉错 release)。
+    if download_binary; then
         rm -f "${INSTALL_DIR}/${BINARY_NAME}.bak"
         log_success "更新成功: v${current_version} -> v${latest_version}"
 
