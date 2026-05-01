@@ -1,121 +1,75 @@
-# Proxy Manager (Go)
+# Proxy Manager
 
-多协议代理服务器一键管理工具 (Go 版本)
+Linux VPS 一键多协议代理部署 + 订阅服务 + Reality SNI 工具，单 Go 二进制。
 
-## 🚀 一键安装
+## 一键安装
 
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
 ```
 
-## ✨ 特性
+## 支持的协议
 
-- 🎯 单二进制文件，无依赖
-- 🖥️ 现代 TUI 界面 (基于 Bubbletea)
-- 🔄 健康检查和自动重启
-- 📦 支持多平台 (Linux amd64/arm64)
-- 🔧 一键安装/更新/卸载
-- 🔍 动态版本检查，自动获取最新版本
+| 协议 | 内核 | 备注 |
+| --- | --- | --- |
+| Snell + Shadow-TLS | `snell-server` + `shadow-tls` | Surge 原生支持 |
+| SS-2022 + Shadow-TLS | `sing-box` | |
+| **VLESS Reality** | **`xray-core`** | XTLS 团队 Reality 实现 (v4.0.7+) |
+| Hysteria2 | `sing-box` | LE 自动签证 |
+| AnyTLS | `sing-box` | LE 自动签证 |
 
-## 📋 支持的协议
+每协议独立端口、独立 systemd unit、专属系统用户 + `CAP_NET_BIND_SERVICE`，
+`ProtectSystem=strict` 硬化。
 
-| 协议 | 内核 | 说明 |
-|------|------|------|
-| Snell + Shadow-TLS | snell-server | Surge 专用协议 |
-| SS-2022 + Shadow-TLS | sing-box | 通用 Shadowsocks |
-| VLESS Reality | sing-box | 抗检测协议 |
-| Hysteria2 | sing-box | 高速 QUIC 协议，支持混淆 |
-| AnyTLS | sing-box | 抗 TLS 指纹检测，支持填充方案 |
+## 核心子命令
 
-> **统一架构**: 除 Snell 外，所有协议都使用 sing-box 内核
+```
+proxy-manager                       # 默认菜单 (装协议 / 改配置 / SNI 评估)
+proxy-manager doctor                # 一键诊断: 协议服务/证书/订阅服务状态
+proxy-manager subscribe enable      # 启用 HTTPS 订阅服务 (autocert)
+proxy-manager subscribe url         # 打印 5 种格式订阅 URL + ASCII QR
+proxy-manager sni-test <host>       # 单点验证 Reality SNI 候选
+cat scan.csv | proxy-manager sni-rank  # 批量打分排序候选
+proxy-manager edit reality --field sni --value www.apple.com  # 改配置无需重装
+proxy-manager kernel list           # 列出已装内核 + 当前/最新版本
+proxy-manager kernel upgrade --all  # 一键升级所有内核
+proxy-manager service-rebuild       # 升级二进制后重写 systemd unit
+proxy-manager update                # 升级 proxy-manager 自身到最新 release
+```
 
-## 🛠️ 使用方法
+## 跨仓库设计
+
+服务端 ↔ Mac 客户端 配套：
+
+- **Mamaaz/D (本仓)**: VPS 部署 + 订阅服务 + SNI 工具
+- **[Mamaaz/XSurge](https://github.com/Mamaaz/XSurge)**: macOS 状态栏 app，通过本地 xray
+  桥接 Reality 成 SOCKS5，让 Surge 这种不原生支持 Reality 的工具也能用
+
+## 文档
+
+- **[docs/DEPLOY.md](docs/DEPLOY.md)** — 部署 checklist：前置条件、协议安装顺序、
+  升级路径、Reality SNI 评估流程、故障排查
+- **[docs/DEVLOG.md](docs/DEVLOG.md)** — 开发日志：版本演化、架构图、关键设计
+  决策、已知限制、回来续做指引
+- **[docs/DESIGN.md](docs/DESIGN.md)** — 跨仓库设计
+
+## 自动化
+
+- CI: `.github/workflows/release.yml` 在 `git tag v*` push 时自动构建
+  amd64 + arm64 binary + checksums，发布到 GitHub Releases
+- Auto cert 续期: `subscribe enable` 后由 `golang.org/x/crypto/acme/autocert`
+  懒签 + 持久化缓存到 `/var/lib/proxy-manager/autocert/`，无需手工续
+
+## 本地构建
 
 ```bash
-# 运行交互式管理界面
-proxy-manager
+go build -ldflags "-s -w -X main.version=$(git describe --tags --always)" \
+  -o proxy-manager ./cmd/proxy-manager
 
-# 显示帮助信息
-proxy-manager --help
-
-# 显示版本信息
-proxy-manager --version
-
-# 使用 TUI 模式
-proxy-manager --tui
+# 跨编 Linux
+GOOS=linux GOARCH=amd64 go build -ldflags "..." -o proxy-manager-linux-amd64 ./cmd/proxy-manager
 ```
 
-## 📥 安装命令
-
-```bash
-# 安装
-bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
-
-# 更新
-bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh) update
-
-# 卸载
-bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh) uninstall
-```
-
-## 🔧 本地构建
-
-```bash
-# 本地构建
-make build
-
-# 跨平台构建
-make all
-
-# 安装到系统
-make install
-
-# 创建发布包
-make release
-```
-
-## 📁 项目结构
-
-```
-proxy-manager-go/
-├── cmd/proxy-manager/     # 主入口
-├── internal/
-│   ├── config/           # 配置管理
-│   ├── install/          # 安装模块 (snell/singbox/reality/hysteria2/anytls)
-│   ├── services/         # 服务管理
-│   ├── ui/               # TUI 界面
-│   ├── utils/            # 工具函数 (版本检查等)
-│   └── health/           # 健康检查
-├── scripts/
-│   └── install.sh        # 在线安装脚本
-├── dist/                 # 编译输出
-├── .github/workflows/    # CI/CD
-├── Makefile              # 构建脚本
-└── go.mod                # Go 模块
-```
-
-## 🔍 版本检查
-
-安装时自动从官方源获取最新版本：
-
-| 组件 | 版本源 |
-|------|--------|
-| Snell | [Surge KB](https://kb.nssurge.com/surge-knowledge-base/release-notes/snell) |
-| Sing-box | [GitHub API](https://api.github.com/repos/SagerNet/sing-box/releases/latest) |
-| Shadow-TLS | [GitHub API](https://api.github.com/repos/ihciah/shadow-tls/releases/latest) |
-
-## 🏥 健康检查
-
-安装后会自动配置健康检查定时器，每 5 分钟检查一次代理服务状态，自动重启异常服务。
-
-```bash
-# 查看健康检查状态
-systemctl status proxy-health.timer
-
-# 查看健康检查日志
-tail -f /var/log/proxy-manager/health.log
-```
-
-## 📄 License
+## License
 
 MIT
