@@ -161,18 +161,23 @@ get_installed_version() {
 download_binary() {
     local version=${1:-$VERSION}
     local temp_file=$(mktemp)
-    
+
     log_info "正在下载 ${BINARY_NAME} v${version} (${OS}-${ARCH})..."
-    
-    # 尝试备用下载地址 (raw.githubusercontent.com/dist)
-    local download_url="${RAW_URL}/dist/${BINARY_NAME}-${OS}-${ARCH}"
+
+    # 优先从 GitHub Release 拉。版本号有则用 tag URL，否则取 latest。
+    # latest 路径是 GitHub 的 302 别名，省去先调 API 的额外往返。
+    local download_url
+    if [ -n "$version" ] && [ "$version" != "dev" ]; then
+        download_url="https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/download/v${version}/${BINARY_NAME}-${OS}-${ARCH}"
+    else
+        download_url="${RELEASE_URL}/${BINARY_NAME}-${OS}-${ARCH}"
+    fi
     log_info "下载地址: $download_url"
-    
+
     if curl -L --connect-timeout 10 --max-time 120 --progress-bar "$download_url" -o "$temp_file" 2>&1; then
-        # 验证文件大小
         local size=$(stat -c%s "$temp_file" 2>/dev/null || stat -f%z "$temp_file" 2>/dev/null || echo 0)
         log_info "下载文件大小: ${size} bytes"
-        
+
         if [ "$size" -gt 1000000 ]; then  # 至少 1MB
             mv "$temp_file" "${INSTALL_DIR}/${BINARY_NAME}"
             chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
@@ -183,14 +188,14 @@ download_binary() {
             log_success "二进制文件下载成功 (短别名: pm)"
             return 0
         else
-            log_error "下载的文件太小，可能下载失败"
+            log_error "下载的文件太小 (${size} bytes)，可能 release 还未发布或网络异常"
         fi
     else
-        log_error "curl 下载失败"
+        log_error "curl 下载失败 (${download_url})"
     fi
-    
+
     rm -f "$temp_file"
-    log_error "下载失败，请检查网络连接"
+    log_error "下载失败，请检查网络连接或确认 release 已发布"
     log_info "您也可以手动下载: $download_url"
     return 1
 }

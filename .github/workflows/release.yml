@@ -7,13 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 4.0.0)'
+        description: 'Version to release (e.g., 4.0.1)'
         required: true
-        default: '4.0.0'
 
 jobs:
   build:
-    name: Build
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -24,39 +23,49 @@ jobs:
             goarch: arm64
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
 
-      - name: Get version
+      - name: Resolve version
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build binary
+      - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          cd P/proxy_manager_go
-          go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
-            -o ../../proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }} \
-            ./cmd/proxy-manager/
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/proxy-manager
+          ls -la proxy-manager-*
+
+      - name: Smoke test (amd64 only)
+        if: matrix.goarch == 'amd64'
+        run: |
+          ./proxy-manager-linux-amd64 --version
+          ./proxy-manager-linux-amd64 --help | head -10
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }}
           path: proxy-manager-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
 
   release:
     name: Release
@@ -66,7 +75,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Download all artifacts
@@ -74,38 +83,34 @@ jobs:
         with:
           path: artifacts
 
-      - name: Get version
+      - name: Resolve version
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Prepare release files
+      - name: Stage release files
         run: |
           mkdir -p release
-          for dir in artifacts/*/; do
-            name=$(basename "$dir")
-            cp "${dir}${name}" "release/${name}"
+          for d in artifacts/*/; do
+            name=$(basename "$d")
+            cp "${d}${name}" "release/${name}"
             chmod +x "release/${name}"
           done
+          (cd release && sha256sum * > checksums.txt)
           ls -la release/
 
-      - name: Generate checksums
-        run: |
-          cd release
-          sha256sum * > checksums.txt
-          cat checksums.txt
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Create release
+        uses: softprops/action-gh-release@v2
         with:
           name: Proxy Manager v${{ steps.version.outputs.VERSION }}
           tag_name: v${{ steps.version.outputs.VERSION }}
           draft: false
           prerelease: false
+          generate_release_notes: true
           files: |
             release/proxy-manager-linux-amd64
             release/proxy-manager-linux-arm64
@@ -113,34 +118,21 @@ jobs:
           body: |
             ## Proxy Manager v${{ steps.version.outputs.VERSION }}
 
-            多协议代理服务器一键管理工具 (Go 版本)
-
-            ### 一键安装
+            ### 一键安装 / 升级
 
             ```bash
-            bash <(curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/P/proxy_manager_go/scripts/install.sh)
+            bash <(curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh)
             ```
 
-            ### 下载
+            ### 直接下载
 
-            | 平台 | 架构 | 下载 |
-            |------|------|------|
-            | Linux | amd64 | [proxy-manager-linux-amd64](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/proxy-manager-linux-amd64) |
-            | Linux | arm64 | [proxy-manager-linux-arm64](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/proxy-manager-linux-arm64) |
+            | 平台 | 架构 | 链接 |
+            |---|---|---|
+            | Linux | amd64 | `proxy-manager-linux-amd64` |
+            | Linux | arm64 | `proxy-manager-linux-arm64` |
 
-            ### 支持的协议
+            校验：见 `checksums.txt` (SHA-256)。
 
-            - Snell + Shadow-TLS
-            - SS-2022 + Shadow-TLS
-            - VLESS Reality
-            - Hysteria2
-            - AnyTLS
-
-            ### 更新日志
-
-            - 完整 Go 重写
-            - 现代 TUI 界面
-            - 健康检查和自动重启
-            - 一键安装脚本
+            支持的协议：Snell + Shadow-TLS / SS-2022 + Shadow-TLS / VLESS Reality / Hysteria2 / AnyTLS。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

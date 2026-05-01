@@ -23,15 +23,24 @@ dig +short <your-domain> @1.1.1.1
 
 ## 1. 安装
 
-> ⚠️ 当前 install.sh 从 `raw.githubusercontent.com/Mamaaz/D/main/dist/` 拉二进制，
-> 但 PR1 已删除仓库内 `dist/`。在 GitHub Releases workflow 落地前，请用以下临时方案：
+### 在线安装（推荐）
 
-### 临时：本地交叉编译 + scp
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
+```
+
+install.sh 从 GitHub Releases 拉对应平台 (linux/amd64 或 linux/arm64) 的预编译
+二进制。CI（`.github/workflows/release.yml`）在 `git tag v*` push 时自动触发，
+产出 binary + checksums 上传到 release。
+
+### 离线 / 调试：本地交叉编译 + scp
 
 ```bash
 # 本地（macOS/Linux）
 cd /path/to/Mamaaz/D
-GOOS=linux GOARCH=amd64 go build -o /tmp/proxy-manager ./cmd/proxy-manager
+GOOS=linux GOARCH=amd64 go build \
+  -ldflags "-s -w -X main.version=$(git describe --tags --always)" \
+  -o /tmp/proxy-manager ./cmd/proxy-manager
 scp /tmp/proxy-manager root@<vps>:/usr/local/bin/proxy-manager
 
 # VPS 上
@@ -39,12 +48,6 @@ ssh root@<vps>
 chmod +x /usr/local/bin/proxy-manager
 ln -sf /usr/local/bin/proxy-manager /usr/local/bin/pm
 proxy-manager --version
-```
-
-### 正式（Releases workflow 上线后）
-
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
 ```
 
 ## 2. 选择部署顺序
@@ -242,7 +245,7 @@ proxy-manager service-rebuild   # 强制重写所有协议 unit + restart
 
 | 限制 | 影响 | 改进方向 |
 | --- | --- | --- |
-| 没有 GitHub Releases | install.sh 在线安装当前不可用 | 加 release.yml workflow |
+| ~~没有 GitHub Releases~~ | ~~install.sh 在线安装当前不可用~~ | ✅ 已修：`.github/workflows/release.yml` |
 | acme.sh vs autocert 抢 :80 | 必须按"先协议后订阅"顺序装 | 后续可改 webroot 方式共享 :80 |
 | systemd unit 落 `/lib/systemd/system/` | 非惯例（应在 `/etc/`），但工作正常 | 一行常量改动，低优先级 |
 | 单机部署，无 HA / 集群 | 单点故障 | 当前 scope 不需要 |
