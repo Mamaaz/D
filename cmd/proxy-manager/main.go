@@ -8,7 +8,8 @@ import (
 	"github.com/Mamaaz/proxy-manager/internal/ui"
 )
 
-const version = "4.0.0"
+// 编译时由 -ldflags "-X main.version=<tag>" 注入。本地未注入时显示 dev。
+var version = "dev"
 
 func main() {
 	// 处理命令行参数
