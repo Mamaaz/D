@@ -382,6 +382,7 @@ func ViewSnellConfig() {
 	fmt.Printf("%sSurge:%s\n", utils.ColorCyan, utils.ColorReset)
 	fmt.Printf("%s%s%s\n", utils.ColorGreen, surgeProxy, utils.ColorReset)
 	fmt.Println()
+	PrintAdditionalFormatsForType(store.TypeSnellShadowTLS)
 }
 
 // =========================================

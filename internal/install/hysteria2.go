@@ -366,6 +366,7 @@ func ViewHysteria2Config() {
 	fmt.Printf("%sSurge:%s\n", utils.ColorCyan, utils.ColorReset)
 	fmt.Printf("%s%s%s\n", utils.ColorGreen, surgeProxy.String(), utils.ColorReset)
 	fmt.Println()
+	PrintAdditionalFormatsForType(store.TypeHysteria2)
 }
 
 // =========================================

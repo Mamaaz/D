@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/Mamaaz/proxy-manager/internal/format"
+	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
@@ -26,6 +28,31 @@ const (
 // =========================================
 // 通用证书管理
 // =========================================
+
+// PrintAdditionalFormatsForType 给查看配置流程在 Surge 行之下追加 QuantumultX
+// 行 (将来可加 Mihomo / Clash 等)。从 store.Load() 找到对应类型的节点，
+// 调 format.ToQX。失败静默——查看流程不应被多余格式打断。
+func PrintAdditionalFormatsForType(t store.NodeType) {
+	s, err := store.Load()
+	if err != nil || s == nil {
+		return
+	}
+	var node *store.Node
+	for i := range s.Nodes {
+		if s.Nodes[i].Type == t {
+			node = &s.Nodes[i]
+			break
+		}
+	}
+	if node == nil {
+		return
+	}
+	if qx, err := format.ToQX(node); err == nil && qx != "" {
+		fmt.Printf("%sQuantumultX:%s\n%s%s%s\n\n",
+			utils.ColorCyan, utils.ColorReset,
+			utils.ColorGreen, qx, utils.ColorReset)
+	}
+}
 
 // CloudflareTokenPath 是 CF API token 持久化的位置。
 // 权限 0600，acme.sh cron 续签时也能读到 (root 身份跑)。
