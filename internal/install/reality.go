@@ -14,13 +14,26 @@ import (
 )
 
 // =========================================
-// VLESS Reality 安装
+// VLESS Reality 安装 (xray-core 内核)
 // =========================================
-
+//
+// 从 v4.0.7 起，Reality 协议从 sing-box 切到 xray-core：
+//   - Reality 是 XTLS 团队的发明，新特性 (e.g. MLKEM-768) 先进 xray
+//   - 其他协议 (Snell+ShadowTLS, SS2022+ShadowTLS, Hysteria2, AnyTLS) 继续 sing-box
+//
+// 旧 sing-box-reality.service 由 RebuildAllServices 中的迁移逻辑自动卸载。
+// 配置目录从 /etc/sing-box-reality 迁到 /etc/xray-reality。
 const (
-	RealityConfigDir       = "/etc/sing-box-reality"
-	RealityConfigPath      = "/etc/sing-box-reality/config.json"
+	RealityConfigDir       = "/etc/xray-reality"
+	RealityConfigPath      = "/etc/xray-reality/config.json"
 	RealityProxyConfigPath = "/etc/reality-proxy-config.txt"
+
+	// 旧路径，用于迁移检测
+	LegacyRealityConfigDir  = "/etc/sing-box-reality"
+	LegacyRealityServiceUnit = "/lib/systemd/system/sing-box-reality.service"
+
+	RealityServiceName = "xray-reality"
+	RealityServiceUser = "xray"
 )
 
 // RealityConfig Reality 配置
@@ -66,24 +79,24 @@ func InstallReality() (*InstallResult, error) {
 		return nil, err
 	}
 
-	// 获取版本
-	singboxVersion := utils.GetLatestVersion("SagerNet/sing-box", utils.DefaultSingboxVersion)
-	utils.PrintInfo("Sing-box 版本: %s", singboxVersion)
-
-	// 下载 Sing-box (如果不存在)
-	if !utils.FileExists(SingboxBinaryPath) {
-		if err := downloadSingbox(singboxVersion, arch); err != nil {
-			return nil, fmt.Errorf("下载 Sing-box 失败: %v", err)
-		}
+	// 拿 xray 最新版 + 下载 (Reality 切到 xray 内核)
+	xrayVersion := utils.GetLatestVersion("XTLS/Xray-core", DefaultXrayVersion)
+	utils.PrintInfo("Xray 版本: %s", xrayVersion)
+	if err := downloadXray(xrayVersion, arch); err != nil {
+		return nil, fmt.Errorf("下载 Xray 失败: %v", err)
 	}
 
 	// 获取配置参数
 	port := promptPort("请输入 Reality 监听端口", 443)
 	serverName := selectRealityServerName()
 
-	// 生成密钥
-	uuid := generateUUID()
-	privateKey, publicKey := generateRealityKeyPair()
+	// 生成密钥 — 用 xray x25519 (sing-box generate 路径已废弃)
+	uuid := generateRandomUUIDv4()
+	kp, err := GenerateXrayReality25519()
+	if err != nil {
+		return nil, fmt.Errorf("生成 Reality 密钥失败: %w", err)
+	}
+	privateKey, publicKey := kp.PrivateKey, kp.PublicKey
 	shortID := generateShortID()
 
 	config := RealityConfig{
@@ -95,28 +108,26 @@ func InstallReality() (*InstallResult, error) {
 		PublicKey:      publicKey,
 		ShortID:        shortID,
 		ServerName:     serverName,
-		SingboxVersion: singboxVersion,
+		SingboxVersion: xrayVersion, // 名字保留兼容旧 .txt schema (字段叫 SINGBOX_VERSION 但存的是当前内核版本)
 	}
 
-	// 创建配置
+	// 旧 sing-box-reality 残留先清掉，避免端口冲突或服务名混淆
+	migrateLegacyRealityIfPresent()
+
 	if err := createRealityConfig(config); err != nil {
 		return nil, fmt.Errorf("创建配置失败: %v", err)
 	}
 
-	// 创建系统用户
-	utils.CreateSystemUser("sing-box")
+	utils.CreateSystemUser(RealityServiceUser)
 
-	// 创建 systemd 服务
 	if err := createRealityService(); err != nil {
 		return nil, fmt.Errorf("创建服务失败: %v", err)
 	}
 
-	// 启动服务
-	utils.ServiceEnable("sing-box-reality")
-	utils.ServiceStart("sing-box-reality")
+	utils.ServiceEnable(RealityServiceName)
+	utils.ServiceStart(RealityServiceName)
 
-	// 验证服务
-	if !utils.VerifyServiceStarted("sing-box-reality", 10) {
+	if !utils.VerifyServiceStarted(RealityServiceName, 10) {
 		return nil, fmt.Errorf("Reality 服务启动失败")
 	}
 
@@ -256,6 +267,9 @@ func generateShortID() string {
 	return strings.TrimSpace(string(output))
 }
 
+// createRealityConfig 写 xray-core 风格的 Reality JSON。字段名跟 sing-box
+// 不同：privateKey (camelCase)、shortIds (数组 + 复数)、dest 用 host:port、
+// flow 直接写在 client 上、serverNames 是数组。
 func createRealityConfig(cfg RealityConfig) error {
 	if err := os.MkdirAll(RealityConfigDir, 0755); err != nil {
 		return err
@@ -263,64 +277,83 @@ func createRealityConfig(cfg RealityConfig) error {
 
 	config := map[string]interface{}{
 		"log": map[string]interface{}{
-			"level":     "info",
-			"timestamp": true,
+			"loglevel": "warning",
 		},
 		"inbounds": []map[string]interface{}{
 			{
-				"type":        "vless",
-				"tag":         "vless-in",
-				"listen":      "::",
-				"listen_port": cfg.Port,
-				"users": []map[string]interface{}{
-					{
-						"uuid": cfg.UUID,
-						"flow": "xtls-rprx-vision",
+				"tag":      "vless-in",
+				"listen":   "0.0.0.0",
+				"port":     cfg.Port,
+				"protocol": "vless",
+				"settings": map[string]interface{}{
+					"clients": []map[string]interface{}{
+						{
+							"id":   cfg.UUID,
+							"flow": "xtls-rprx-vision",
+						},
+					},
+					"decryption": "none",
+				},
+				"streamSettings": map[string]interface{}{
+					"network":  "tcp",
+					"security": "reality",
+					"realitySettings": map[string]interface{}{
+						"show":         false,
+						"dest":         fmt.Sprintf("%s:443", cfg.ServerName),
+						"xver":         0,
+						"serverNames":  []string{cfg.ServerName},
+						"privateKey":   cfg.PrivateKey,
+						"shortIds":     []string{cfg.ShortID},
 					},
 				},
-				"tls": map[string]interface{}{
-					"enabled":     true,
-					"server_name": cfg.ServerName,
-					"reality": map[string]interface{}{
-						"enabled": true,
-						"handshake": map[string]interface{}{
-							"server":      cfg.ServerName,
-							"server_port": 443,
-						},
-						"private_key": cfg.PrivateKey,
-						"short_id":    []string{cfg.ShortID},
-					},
+				"sniffing": map[string]interface{}{
+					"enabled":      true,
+					"destOverride": []string{"http", "tls", "quic"},
+					"routeOnly":    true,
 				},
 			},
 		},
 		"outbounds": []map[string]interface{}{
-			{
-				"type": "direct",
-				"tag":  "direct",
-			},
+			{"protocol": "freedom", "tag": "direct"},
+			{"protocol": "blackhole", "tag": "block"},
 		},
+		// 注：故意不写 routing.rules——xray 的 geoip:private 等规则要 geoip.dat
+		// 数据库文件，xray binary 不自带。简单部署默认全放行；用户要 BT 阻断
+		// /内网防泄漏，单独下 geoip.dat 到 /usr/local/bin/ 后手动加 rules。
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err
 	}
-
 	return utils.WriteFile(RealityConfigPath, string(data), PermConfigFile)
 }
 
+// createRealityService 写 xray-reality.service unit。User=xray + CAP_NET_BIND_SERVICE
+// 跟其他协议的 isolation 模型一致；非 root 也能 bind 443。
 func createRealityService() error {
-	// CAP_NET_BIND_SERVICE is precisely the cap that lets a non-root user
-	// bind ports < 1024. Running as root + cap was contradictory — the cap
-	// is a no-op for root. Drop privileges to the dedicated sing-box user
-	// so Reality matches the same isolation model as the other protocols.
 	return CreateSystemdService(SystemdServiceConfig{
-		Name:         "sing-box-reality",
-		Description:  "Sing-box Reality Service",
-		User:         "sing-box",
-		ExecStart:    fmt.Sprintf("%s run -c %s", SingboxBinaryPath, RealityConfigPath),
+		Name:         RealityServiceName,
+		Description:  "Xray-core Reality Service",
+		User:         RealityServiceUser,
+		ExecStart:    fmt.Sprintf("%s run -c %s", XrayBinaryPath, RealityConfigPath),
 		Capabilities: "CAP_NET_BIND_SERVICE",
 	})
+}
+
+// migrateLegacyRealityIfPresent 检测旧 sing-box-reality 残留，停服 + 删 unit
+// + 删旧配置目录。安全：只在 install / rebuild 这些显式触发处调用，不在
+// 普通查询路径上自动跑。
+func migrateLegacyRealityIfPresent() {
+	if !utils.FileExists(LegacyRealityServiceUnit) {
+		return
+	}
+	utils.PrintInfo("检测到旧 sing-box-reality 服务，正在迁移到 xray-reality...")
+	_ = utils.ServiceStop("sing-box-reality")
+	_ = utils.ServiceDisable("sing-box-reality")
+	_ = os.Remove(LegacyRealityServiceUnit)
+	_ = os.RemoveAll(LegacyRealityConfigDir)
+	_ = utils.DaemonReload()
 }
 
 func saveRealityConfig(cfg RealityConfig) {
@@ -398,53 +431,48 @@ func ViewRealityConfig() {
 // Reality 更新
 // =========================================
 
-// UpdateReality 更新 Reality
+// UpdateReality 更新 xray-core 内核 (Reality 协议从 v4.0.7 起跑在 xray)。
+// 字段名 SINGBOX_VERSION 保留兼容旧 .txt schema，实际存的是 xray 版本号。
 func UpdateReality() error {
 	if !utils.FileExists(RealityProxyConfigPath) {
 		return fmt.Errorf("VLESS Reality 未安装")
 	}
-
-	// Reality 使用和 Singbox 相同的更新逻辑
 	config, err := ParseConfigFile(RealityProxyConfigPath)
 	if err != nil {
 		return err
 	}
-
 	currentVersion := config["SINGBOX_VERSION"]
-	latestVersion := utils.GetLatestVersion("SagerNet/sing-box", utils.DefaultSingboxVersion)
+	latestVersion := utils.GetLatestVersion("XTLS/Xray-core", DefaultXrayVersion)
 
-	fmt.Printf("%s当前版本:%s %s\n", utils.ColorCyan, utils.ColorReset, currentVersion)
-	fmt.Printf("%s最新版本:%s %s\n", utils.ColorCyan, utils.ColorReset, latestVersion)
-
+	fmt.Printf("%s当前 Xray 版本:%s %s\n", utils.ColorCyan, utils.ColorReset, currentVersion)
+	fmt.Printf("%s最新 Xray 版本:%s %s\n", utils.ColorCyan, utils.ColorReset, latestVersion)
 	if currentVersion == latestVersion {
 		utils.PrintSuccess("已是最新版本")
 		return nil
 	}
-
 	if !utils.PromptConfirm("确认更新？") {
 		return nil
 	}
 
-	// 停止服务
-	utils.ServiceStop("sing-box-reality")
+	utils.ServiceStop(RealityServiceName)
 
-	// 更新 Sing-box
-	os.Rename(SingboxBinaryPath, SingboxBinaryPath+".bak")
+	// 备份现有 binary 防回滚
+	os.Rename(XrayBinaryPath, XrayBinaryPath+".bak")
 	arch, _ := utils.DetectArch()
-	os.Remove(SingboxBinaryPath)
+	os.Remove(XrayBinaryPath)
 
-	if err := downloadSingbox(latestVersion, arch); err != nil {
-		os.Rename(SingboxBinaryPath+".bak", SingboxBinaryPath)
-		utils.ServiceStart("sing-box-reality")
+	if err := downloadXray(latestVersion, arch); err != nil {
+		os.Rename(XrayBinaryPath+".bak", XrayBinaryPath)
+		utils.ServiceStart(RealityServiceName)
 		return fmt.Errorf("更新失败: %v", err)
 	}
 
-	config["SINGBOX_VERSION"] = latestVersion
+	config["SINGBOX_VERSION"] = latestVersion // 字段名兼容
 	SaveConfigFile(RealityProxyConfigPath, config)
 
-	utils.ServiceStart("sing-box-reality")
+	utils.ServiceStart(RealityServiceName)
 
-	os.Remove(SingboxBinaryPath + ".bak")
+	os.Remove(XrayBinaryPath + ".bak")
 	utils.PrintSuccess("更新成功: %s -> %s", currentVersion, latestVersion)
 	return nil
 }
@@ -453,23 +481,23 @@ func UpdateReality() error {
 // Reality 卸载
 // =========================================
 
-// UninstallReality 卸载 Reality
+// UninstallReality 卸载 Reality (xray 内核)。
+// xray 二进制只服务 Reality，所以卸载时直接删 binary + 用户；不像 sing-box
+// 那样要检查"其他协议是否在用"。
 func UninstallReality() error {
 	utils.PrintInfo("正在卸载 VLESS Reality...")
 
-	RemoveSystemdService("sing-box-reality")
+	RemoveSystemdService(RealityServiceName)
+	// 旧的 sing-box-reality unit 也清掉，防止残留
+	migrateLegacyRealityIfPresent()
 
 	os.RemoveAll(RealityConfigDir)
 	os.Remove(RealityProxyConfigPath)
 	removeNodeByType(store.TypeVLESSReality)
 
-	// 如果没有其他服务使用 sing-box，删除二进制和用户
-	if !IsSingboxShared(RealityProxyConfigPath) {
-		os.Remove(SingboxBinaryPath)
-		utils.DeleteSystemUser("sing-box")
-	} else {
-		utils.PrintInfo("其他服务仍在使用 sing-box，保留二进制文件")
-	}
+	// xray 是 Reality 专属，没有其他协议共用，直接卸
+	os.Remove(XrayBinaryPath)
+	utils.DeleteSystemUser(RealityServiceUser)
 
 	utils.PrintSuccess("VLESS Reality 已卸载")
 	return nil

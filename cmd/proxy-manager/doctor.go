@@ -94,10 +94,15 @@ type protocolDescriptor struct {
 	certPath    string // optional, empty if no cert to inspect
 }
 
+// 注：service name 是 systemd unit 名，不一定等于背后的 binary。
+// 实际内核映射 (v4.0.7+):
+//   - Snell + ShadowTLS: snell-server + shadow-tls 独立 binary
+//   - SS-2022 / Hysteria2 / AnyTLS: 全部由 sing-box ExecStart
+//   - VLESS Reality: 切到 xray-core (Reality 是 XTLS 团队产品，新特性先进 xray)
 var protocolMap = map[store.NodeType]protocolDescriptor{
 	store.TypeSnellShadowTLS:  {"Snell + Shadow-TLS", "snell", ""},
 	store.TypeSS2022ShadowTLS: {"SS2022 + Shadow-TLS", "sing-box", ""},
-	store.TypeVLESSReality:    {"VLESS + Reality", "sing-box-reality", ""},
+	store.TypeVLESSReality:    {"VLESS + Reality", "xray-reality", ""},
 	store.TypeHysteria2:       {"Hysteria2", "hysteria2", "/etc/hysteria2/server.crt"},
 	store.TypeAnyTLS:          {"AnyTLS", "anytls", "/etc/anytls/server.crt"},
 }

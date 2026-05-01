@@ -42,8 +42,8 @@ func RebuildAllServices() ([]string, error) {
 		{
 			name:    "VLESS Reality",
 			check:   func() bool { return utils.FileExists(RealityProxyConfigPath) },
-			rebuild: createRealityService,
-			units:   []string{"sing-box-reality"},
+			rebuild: rebuildReality,
+			units:   []string{RealityServiceName},
 		},
 		{
 			name:    "Hysteria2",
@@ -80,6 +80,54 @@ func RebuildAllServices() ([]string, error) {
 	}
 
 	return rebuilt, firstErr
+}
+
+// rebuildReality 处理两种情况：
+//  1. 全新 / 已是 xray 内核：重写 xray-reality.service unit
+//  2. 旧 sing-box 内核 → 迁移到 xray (v4.0.7+)：
+//     - 卸 sing-box-reality.service + 删旧 config dir
+//     - 下载 xray binary (如未装)
+//     - 用现有 keypair / UUID / SNI / shortID 重生成 xray config
+//     - 起 xray-reality.service
+//
+// 关键：UUID / privateKey / publicKey / shortId 全保留——客户端订阅里这些
+// 字段不变，重连后立即可用，无需重发新订阅。
+func rebuildReality() error {
+	migrateLegacyRealityIfPresent()
+	utils.CreateSystemUser(RealityServiceUser)
+
+	// 确保 xray binary 在；旧部署可能压根没有
+	if !utils.FileExists(XrayBinaryPath) {
+		arch, err := utils.DetectArch()
+		if err != nil {
+			return fmt.Errorf("detect arch: %w", err)
+		}
+		v := utils.GetLatestVersion("XTLS/Xray-core", DefaultXrayVersion)
+		if err := downloadXray(v, arch); err != nil {
+			return fmt.Errorf("download xray: %w", err)
+		}
+	}
+
+	// 从 .txt 读现有配置 (sing-box 时代写的 PRIVATE_KEY/UUID 都能复用)
+	kv, err := ParseConfigFile(RealityProxyConfigPath)
+	if err != nil {
+		return fmt.Errorf("parse reality config: %w", err)
+	}
+	cfg := RealityConfig{
+		ServerIP:       kv["SERVER_IP"],
+		IPVersion:      kv["IP_VERSION"],
+		Port:           atoi(kv["PORT"]),
+		UUID:           kv["UUID"],
+		PrivateKey:     kv["PRIVATE_KEY"],
+		PublicKey:      kv["PUBLIC_KEY"],
+		ShortID:        kv["SHORT_ID"],
+		ServerName:     kv["SERVER_NAME"],
+		SingboxVersion: kv["SINGBOX_VERSION"], // 字段名兼容；存的可能是旧 sing-box 版本
+	}
+	if err := createRealityConfig(cfg); err != nil {
+		return fmt.Errorf("create xray reality config: %w", err)
+	}
+	return createRealityService()
 }
 
 // rebuildSnell needs the original SnellConfig because shadow-tls.service's
