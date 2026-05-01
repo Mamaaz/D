@@ -25,36 +25,44 @@ type Service struct {
 	SystemdName string
 }
 
-// 预定义服务列表
+// 预定义服务列表。
+//
+// ConfigPath 是协议的 .txt 配置 (install 时落的 source of truth)，
+// 而非 sing-box/xray 内核 config.json (那个路径会随内核切换变)。
+// 例如 reality 在 v4.0.7 内核从 sing-box 切到 xray，内核 config.json
+// 路径从 /etc/sing-box-reality/ 变成 /etc/xray-reality/，但
+// /etc/reality-proxy-config.txt 这个 .txt 永远不变，是稳定锚点。
+//
+// SystemdName 跟着内核走 (v4.0.7 起 reality unit 是 xray-reality)。
 var Services = map[string]Service{
 	"snell": {
 		Name:        "snell",
 		DisplayName: "Snell + Shadow-TLS",
-		ConfigPath:  "/etc/snell/snell-server.conf",
+		ConfigPath:  "/etc/snell-proxy-config.txt",
 		SystemdName: "snell",
 	},
 	"singbox": {
 		Name:        "singbox",
 		DisplayName: "Sing-box (SS-2022)",
-		ConfigPath:  "/etc/sing-box/config.json",
+		ConfigPath:  "/etc/singbox-proxy-config.txt",
 		SystemdName: "sing-box",
 	},
 	"reality": {
 		Name:        "reality",
 		DisplayName: "VLESS Reality",
-		ConfigPath:  "/etc/sing-box-reality/config.json",
-		SystemdName: "sing-box-reality",
+		ConfigPath:  "/etc/reality-proxy-config.txt",
+		SystemdName: "xray-reality", // v4.0.7+ 改 xray
 	},
 	"hysteria2": {
 		Name:        "hysteria2",
 		DisplayName: "Hysteria2",
-		ConfigPath:  "/etc/hysteria2/config.json",
+		ConfigPath:  "/etc/hysteria2-proxy-config.txt",
 		SystemdName: "hysteria2",
 	},
 	"anytls": {
 		Name:        "anytls",
 		DisplayName: "AnyTLS",
-		ConfigPath:  "/etc/anytls/config.json",
+		ConfigPath:  "/etc/anytls-proxy-config.txt",
 		SystemdName: "anytls",
 	},
 }
