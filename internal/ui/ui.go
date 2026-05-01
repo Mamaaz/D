@@ -11,6 +11,7 @@ import (
 	"github.com/Mamaaz/proxy-manager/internal/services"
 	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
+	"github.com/Mamaaz/proxy-manager/internal/version"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -76,7 +77,7 @@ func InitialModel() Model {
 	delegate.ShowDescription = true
 
 	l := list.New(menuItems, delegate, 60, 20)
-	l.Title = "Proxy Manager v4.0"
+	l.Title = "Proxy Manager v" + version.Version
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 
@@ -150,7 +151,7 @@ func (m Model) View() string {
 	// 标题
 	b.WriteString(titleStyle.Render("╔════════════════════════════════════════════════════════════╗"))
 	b.WriteString("\n")
-	b.WriteString(titleStyle.Render("║       Proxy Manager v4.0 - 多协议代理管理                  ║"))
+	b.WriteString(titleStyle.Render("║       Proxy Manager v" + version.Version + " - 多协议代理管理"))
 	b.WriteString("\n")
 	b.WriteString(titleStyle.Render("╚════════════════════════════════════════════════════════════╝"))
 	b.WriteString("\n\n")
@@ -599,11 +600,10 @@ func showHeader() {
 	fmt.Print("\033[2J\033[H")
 
 	fmt.Printf("%s╔════════════════════════════════════════════════════════════╗%s\n", utils.ColorCyan, utils.ColorReset)
-	fmt.Printf("%s║%s       %sProxy Manager v4.0%s - %s多协议代理管理%s          %s║%s\n",
+	fmt.Printf("%s║%s       %sProxy Manager v%s%s - %s多协议代理管理%s\n",
 		utils.ColorCyan, utils.ColorReset,
-		utils.ColorGreen, utils.ColorReset,
-		utils.ColorYellow, utils.ColorReset,
-		utils.ColorCyan, utils.ColorReset)
+		utils.ColorGreen, version.Version, utils.ColorReset,
+		utils.ColorYellow, utils.ColorReset)
 	fmt.Printf("%s╚════════════════════════════════════════════════════════════╝%s\n", utils.ColorCyan, utils.ColorReset)
 	fmt.Println()
 }
