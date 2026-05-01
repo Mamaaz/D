@@ -122,6 +122,10 @@ func InstallHysteria2() (*InstallResult, error) {
 		return nil, err
 	}
 
+	// 创建系统用户 — 必须在 installCertToHysteria2 之前，chown 才能找到
+	// 用户。详见 anytls.go 同位置注释。
+	utils.CreateSystemUser("hysteria2")
+
 	// 安装证书到 hysteria2 目录
 	if err := installCertToHysteria2(domain); err != nil {
 		return nil, fmt.Errorf("证书安装失败: %v", err)
@@ -131,9 +135,6 @@ func InstallHysteria2() (*InstallResult, error) {
 	if err := createHysteria2SingboxConfig(config); err != nil {
 		return nil, fmt.Errorf("创建配置失败: %v", err)
 	}
-
-	// 创建系统用户
-	utils.CreateSystemUser("hysteria2")
 
 	// 创建 systemd 服务
 	if err := createHysteria2Service(); err != nil {

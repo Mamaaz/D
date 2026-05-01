@@ -149,6 +149,10 @@ func InstallAnyTLS() (*InstallResult, error) {
 		return nil, err
 	}
 
+	// 创建系统用户 — 必须在 installCertToAnyTLS 之前，否则 chown anytls:anytls
+	// 找不到用户失败，证书留 root:root，服务起不来。
+	utils.CreateSystemUser("anytls")
+
 	// 安装证书到 anytls 目录
 	if err := installCertToAnyTLS(domain); err != nil {
 		return nil, fmt.Errorf("证书安装失败: %v", err)
@@ -158,9 +162,6 @@ func InstallAnyTLS() (*InstallResult, error) {
 	if err := createAnyTLSSingboxConfig(config, padding.Scheme); err != nil {
 		return nil, fmt.Errorf("创建配置失败: %v", err)
 	}
-
-	// 创建系统用户
-	utils.CreateSystemUser("anytls")
 
 	// 创建 systemd 服务
 	if err := createAnyTLSService(); err != nil {
