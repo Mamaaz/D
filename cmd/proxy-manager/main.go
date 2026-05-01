@@ -109,8 +109,10 @@ func showHelp() {
   proxy-manager sni-rank [--in scan.csv] [--top N] [host ...]
                              批量探测 + 自动打分排序 + 推荐最佳；接受
                              RealiTLScanner CSV 或 hostname list (stdin / args)
-  proxy-manager edit         修改已安装协议的可变字段 (MVP: VLESS Reality 的
-                             port / uuid / short-id / sni)
+  proxy-manager edit         修改已安装协议的可变字段，无需 reinstall:
+                             - reality: port/uuid/short-id/sni
+                             - snell: snell-port/snell-psk/shadowtls-{port,password}/tls-domain
+                             - ss2022: ss-port/ss-password/shadowtls-{port,password}/tls-domain
   proxy-manager service-rebuild
                              重建所有已安装协议的 systemd 单元
                              (升级二进制后用，让 unit 文件改动生效)
