@@ -243,6 +243,8 @@ func doInstallSnell() {
 	_, err := install.InstallSnell()
 	if err != nil {
 		utils.PrintError("安装失败: %v", err)
+	} else {
+		printSubscribeURLs()
 	}
 	waitForEnter()
 }
@@ -251,6 +253,8 @@ func doInstallSingbox() {
 	_, err := install.InstallSingbox()
 	if err != nil {
 		utils.PrintError("安装失败: %v", err)
+	} else {
+		printSubscribeURLs()
 	}
 	waitForEnter()
 }
@@ -259,6 +263,8 @@ func doInstallReality() {
 	_, err := install.InstallReality()
 	if err != nil {
 		utils.PrintError("安装失败: %v", err)
+	} else {
+		printSubscribeURLs()
 	}
 	waitForEnter()
 }
@@ -267,6 +273,8 @@ func doInstallHysteria2() {
 	_, err := install.InstallHysteria2()
 	if err != nil {
 		utils.PrintError("安装失败: %v", err)
+	} else {
+		printSubscribeURLs()
 	}
 	waitForEnter()
 }
@@ -275,6 +283,8 @@ func doInstallAnyTLS() {
 	_, err := install.InstallAnyTLS()
 	if err != nil {
 		utils.PrintError("安装失败: %v", err)
+	} else {
+		printSubscribeURLs()
 	}
 	waitForEnter()
 }
