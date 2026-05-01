@@ -25,7 +25,7 @@ func doSubscribeMenu() {
 		fmt.Println("  1. 启用订阅服务 (subscribe enable)")
 		fmt.Println("  2. 停用订阅服务 (subscribe disable)")
 		fmt.Println("  3. 查看 7 种格式订阅 URL + 二维码")
-		fmt.Println("  4. 轮换 token (rotate-token，旧 URL 立即失效)")
+		fmt.Println("  4. 轮换 token (rotate-token，旧 URL 7 天后才失效)")
 		fmt.Println("  0. 返回")
 		fmt.Println()
 		choice := utils.PromptInt("请选择", 0, 0, 4)

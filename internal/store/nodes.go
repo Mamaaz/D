@@ -51,11 +51,21 @@ type Node struct {
 
 // SubscribeConfig is reserved for PR2 (subscription server). The token field
 // is generated on first install but only consumed once the HTTP service ships.
+//
+// PreviousToken / PreviousTokenExpiresAt 是 rotate 时的宽限机制:RotateToken
+// 把当前 token 移到 PreviousToken,服务端在过期时间前继续接受它,客户端
+// 有时间换 URL。过期后字段失效但不清理,留作审计参考。
 type SubscribeConfig struct {
-	Token  string `json:"token,omitempty"`
-	Domain string `json:"domain,omitempty"`
-	Port   int    `json:"port,omitempty"`
+	Token                  string    `json:"token,omitempty"`
+	Domain                 string    `json:"domain,omitempty"`
+	Port                   int       `json:"port,omitempty"`
+	PreviousToken          string    `json:"previous_token,omitempty"`
+	PreviousTokenExpiresAt time.Time `json:"previous_token_expires_at,omitempty"`
 }
+
+// PreviousTokenGracePeriod 控制 RotateToken 后旧 token 还能用多久。
+// 7 天:覆盖一次同步周期 (XSurge 默认 60min/次) + 用户度假/请假窗口。
+const PreviousTokenGracePeriod = 7 * 24 * time.Hour
 
 // Store is the on-disk root document.
 type Store struct {
@@ -225,7 +235,8 @@ func EnsureSubscribeToken() (string, error) {
 	return token, nil
 }
 
-// RotateToken regenerates the subscribe token, invalidating all existing URLs.
+// RotateToken regenerates the subscribe token. 旧 token 移到 PreviousToken,
+// 在 PreviousTokenGracePeriod 期内仍然接受,给客户端换 URL 的时间。
 func RotateToken() (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -236,6 +247,10 @@ func RotateToken() (string, error) {
 	token, err := generateToken(16)
 	if err != nil {
 		return "", err
+	}
+	if s.Subscribe.Token != "" {
+		s.Subscribe.PreviousToken = s.Subscribe.Token
+		s.Subscribe.PreviousTokenExpiresAt = time.Now().Add(PreviousTokenGracePeriod)
 	}
 	s.Subscribe.Token = token
 	if err := saveLocked(s); err != nil {
