@@ -27,8 +27,42 @@ const (
 // 通用证书管理
 // =========================================
 
-// InstallAcme 安装 acme.sh 并申请证书
-func InstallAcme(domain string) error {
+// CloudflareTokenPath 是 CF API token 持久化的位置。
+// 权限 0600，acme.sh cron 续签时也能读到 (root 身份跑)。
+const CloudflareTokenPath = "/etc/proxy-manager/cloudflare.env"
+
+// CertChallengeMode 是用户选的 ACME 验证方式。
+type CertChallengeMode int
+
+const (
+	ChallengeHTTP01 CertChallengeMode = iota // standalone (port 80) → webroot fallback
+	ChallengeDNS01CF                         // Cloudflare DNS API
+)
+
+// PromptChallengeMode 让用户选 HTTP-01 还是 DNS-01 (Cloudflare)。
+// 默认 HTTP-01——常见情况下能用且零配置；当用户已启用 subscribe service
+// 占用 :80 时，HTTP-01 会失败，应选 DNS-01。
+func PromptChallengeMode() CertChallengeMode {
+	fmt.Println()
+	fmt.Printf("%sACME 证书申请方式:%s\n", utils.ColorCyan, utils.ColorReset)
+	fmt.Println("  1. HTTP-01 (端口 80 standalone) — 默认，无需额外配置")
+	fmt.Println("       要求 :80 空闲。如已启用 subscribe service 占着 :80，会失败")
+	fmt.Println("  2. DNS-01 via Cloudflare API — 推荐有 subscribe 时用")
+	fmt.Println("       不碰任何端口；要 Cloudflare API Token (Zone:DNS:Edit 权限)")
+	fmt.Println()
+	choice := utils.PromptInt("请选择", 1, 1, 2)
+	if choice == 2 {
+		return ChallengeDNS01CF
+	}
+	return ChallengeHTTP01
+}
+
+// InstallAcme 安装 acme.sh 并申请证书。mode 决定走 HTTP-01 还是 DNS-01。
+//
+// DNS-01 + Cloudflare 路径完全不碰 :80，subscribe service / 任何 :80
+// listener 都不影响。Token 持久化到 CloudflareTokenPath，acme.sh cron
+// 自动续签时也能读到。
+func InstallAcme(domain string, mode CertChallengeMode) error {
 	acmePath := os.Getenv("HOME") + "/.acme.sh/acme.sh"
 	if !utils.FileExists(acmePath) {
 		utils.PrintInfo("安装 acme.sh...")
@@ -40,7 +74,16 @@ func InstallAcme(domain string) error {
 		}
 	}
 
-	utils.PrintInfo("申请 Let's Encrypt 证书...")
+	switch mode {
+	case ChallengeDNS01CF:
+		return issueCertDNS01CF(acmePath, domain)
+	default:
+		return issueCertHTTP01(acmePath, domain)
+	}
+}
+
+func issueCertHTTP01(acmePath, domain string) error {
+	utils.PrintInfo("申请 Let's Encrypt 证书 (HTTP-01 standalone)...")
 	cmd := exec.Command(acmePath, "--issue", "-d", domain, "--standalone", "--keylength", "ec-256", "--force")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -51,11 +94,60 @@ func InstallAcme(domain string) error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("证书申请失败，请确保域名已解析且端口 80 可用")
+			return fmt.Errorf("证书申请失败，请确保域名已解析且端口 80 可用 (或换 DNS-01 方式)")
+		}
+	}
+	return nil
+}
+
+func issueCertDNS01CF(acmePath, domain string) error {
+	cfToken, err := loadOrPromptCloudflareToken()
+	if err != nil {
+		return err
+	}
+	utils.PrintInfo("申请 Let's Encrypt 证书 (DNS-01 via Cloudflare)...")
+	cmd := exec.Command(acmePath, "--issue", "-d", domain, "--dns", "dns_cf", "--keylength", "ec-256", "--force")
+	cmd.Env = append(os.Environ(), "CF_Token="+cfToken)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("DNS-01 证书申请失败: %w", err)
+	}
+	return nil
+}
+
+// loadOrPromptCloudflareToken 优先从 CloudflareTokenPath 读已持久化的 token；
+// 没存过 → 交互问 → 写盘 (0600)。每个域名只用问一次。
+//
+// acme.sh 自己也会把 CF_Token 存到 ~/.acme.sh/account.conf，cron 续签时
+// 自动加载。我们额外存一份方便用户审计 / 替换 token。
+func loadOrPromptCloudflareToken() (string, error) {
+	if data, err := os.ReadFile(CloudflareTokenPath); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "CF_Token=") {
+				return strings.TrimPrefix(line, "CF_Token="), nil
+			}
 		}
 	}
 
-	return nil
+	utils.PrintInfo("Cloudflare API Token 未配置——首次需输入。")
+	fmt.Println("  生成: https://dash.cloudflare.com/profile/api-tokens → Create Token")
+	fmt.Println("  权限: Zone:DNS:Edit (限定要签证的域名 zone)")
+	fmt.Println()
+	token := utils.PromptInput("Cloudflare API Token", "")
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", fmt.Errorf("Cloudflare API Token 不能为空")
+	}
+	if err := os.MkdirAll("/etc/proxy-manager", 0755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(CloudflareTokenPath, []byte("CF_Token="+token+"\n"), 0600); err != nil {
+		return "", fmt.Errorf("保存 CF Token 失败: %w", err)
+	}
+	utils.PrintSuccess("CF Token 已保存到 %s (0600 权限)", CloudflareTokenPath)
+	return token, nil
 }
 
 // InstallCertForService 安装证书到指定服务目录
