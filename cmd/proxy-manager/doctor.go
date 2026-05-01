@@ -105,6 +105,7 @@ var protocolMap = map[store.NodeType]protocolDescriptor{
 	store.TypeVLESSReality:    {"VLESS + Reality", "xray-reality", ""},
 	store.TypeHysteria2:       {"Hysteria2", "hysteria2", "/etc/hysteria2/server.crt"},
 	store.TypeAnyTLS:          {"AnyTLS", "anytls", "/etc/anytls/server.crt"},
+	store.TypeAnyTLSReality:   {"AnyTLS + Reality", "anytls-reality", ""},
 }
 
 func printProtocolRow(n store.Node) {

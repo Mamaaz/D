@@ -65,6 +65,12 @@ var Services = map[string]Service{
 		ConfigPath:  "/etc/anytls-proxy-config.txt",
 		SystemdName: "anytls",
 	},
+	"anytls-reality": {
+		Name:        "anytls-reality",
+		DisplayName: "AnyTLS + Reality",
+		ConfigPath:  "/etc/anytls-reality-proxy-config.txt",
+		SystemdName: "anytls-reality",
+	},
 }
 
 // IsInstalled 检查服务是否已安装
