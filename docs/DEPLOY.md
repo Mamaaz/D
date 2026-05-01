@@ -155,11 +155,55 @@ proxy-manager update
 `service-rebuild` 会：
 - 读 `nodes.json` 列出已装协议
 - 逐个重写 systemd unit（拿到 PR3 的 User= 降权 + v4.0.6 的 subscribe 服务降权）
+- v4.0.7+ 自动迁移旧 sing-box-reality.service → xray-reality.service（详见 §7-X）
 - daemon-reload + restart
 
 老部署只升级二进制不会自动改 unit；必须跑一次 `service-rebuild` 或 `update`。
 
-## 7. Reality SNI 候选评估（v4.0.5+）
+### 6-X 内核管理（v4.0.8+）
+
+```bash
+proxy-manager kernel               # 列出所有内核 + 当前/最新版本
+proxy-manager kernel upgrade       # 交互选要升的内核
+proxy-manager kernel upgrade --all # 一键全升
+proxy-manager kernel upgrade xray-core
+```
+
+输出范例：
+
+```
+Kernel       Current    Latest      Status   Used by
+xray-core    26.3.27    v26.3.27    ✓ 最新    VLESS Reality
+sing-box     1.13.11    v1.13.12    可升级    SS-2022, Hysteria2, AnyTLS
+```
+
+升级会自动 stop services → backup binary → download → start services。失败回滚。
+
+## 7. Reality 内核：xray-core（v4.0.7+）
+
+从 v4.0.7 起 Reality 协议跑在 **xray-core**（之前是 sing-box）。理由：Reality 是
+XTLS 团队的发明，新特性（vision-udp443 / 新 fingerprint / 未来的 MLKEM-768 后量子）
+先进 xray，sing-box 跟进通常滞后 1-3 周。
+
+**其他协议保持 sing-box** —— 它们不是 xray 的强项（xray 不支持 Hysteria2 / AnyTLS / ShadowTLS）。
+
+| 协议 | 内核 |
+|---|---|
+| Snell + ShadowTLS | snell-server + shadow-tls (独立 binary) |
+| SS-2022 + ShadowTLS | sing-box |
+| **VLESS Reality** | **xray-core** |
+| Hysteria2 | sing-box |
+| AnyTLS | sing-box |
+
+**升级路径**：v4.0.6 → v4.0.7 部署后跑 `proxy-manager service-rebuild`，自动迁移：
+- 卸 sing-box-reality.service + 删 /etc/sing-box-reality/
+- 下载 xray binary
+- 用现有 keypair / UUID / shortID / SNI 重建 xray config（客户端无感知）
+- 起 xray-reality.service
+
+**没默认开的 Reality 新特性**：MLKEM-768 后量子 — 客户端兼容性问题（多数客户端 v2box/NekoBox/sing-box 还没跟上）。需要时手动改 config 启用。
+
+## 8. Reality SNI 候选评估（v4.0.5+）
 
 Reality 协议要选一个 TLS 1.3 + X25519 + h2 + 证书可信 的 SNI 目标做仿冒。
 完整流程：
@@ -187,7 +231,7 @@ akamai/...) 减 300 分；隐版本 nginx 加分；TLS RTT 直接当负分。
 > 必须在代理配置 [Rule] 顶部加 `PROCESS-NAME,RealiTLScanner,DIRECT` +
 > `PROCESS-NAME,openssl,DIRECT`，否则结果会被反代后端污染。
 
-## 8. 修改协议配置（无需 reinstall，v4.0.3+）
+## 9. 修改协议配置（无需 reinstall，v4.0.3+）
 
 ```bash
 proxy-manager edit                           # 全交互
@@ -208,7 +252,7 @@ proxy-manager edit ss2022 --field tls-domain --value <new>
 故意不暴露的字段：Reality 的 private/public key、SS-2022 的 encrypt method
 ——改了等于 invalidate 所有客户端，重装表达更清楚。
 
-## 9. 卸载
+## 10. 卸载
 
 ```bash
 proxy-manager --action uninstall_service       # 卸某个协议（交互选）
@@ -298,7 +342,10 @@ proxy-manager service-rebuild   # 强制重写所有协议 + subscribe unit + re
 | --- | --- | --- |
 | ~~没有 GitHub Releases~~ | ~~install.sh 在线安装当前不可用~~ | ✅ 已修：`.github/workflows/release.yml` |
 | ~~subscribe 服务跑 root~~ | ~~权限过大~~ | ✅ v4.0.6 改 `User=proxy-manager` + `CAP_NET_BIND_SERVICE` |
+| ~~Reality 在 sing-box 上落后于 xray 新特性~~ | ~~vision-udp443/PQ 等等不到~~ | ✅ v4.0.7 切到 xray-core |
+| ~~多内核升级要逐协议跑~~ | ~~散在 5 个 UpdateXxx~~ | ✅ v4.0.8 加 `proxy-manager kernel upgrade` |
 | acme.sh vs autocert 抢 :80 | 必须按"先协议后订阅"顺序装 | 后续可改 webroot 方式共享 :80 |
 | systemd unit 落 `/lib/systemd/system/` | 非惯例（应在 `/etc/`），但工作正常 | 一行常量改动，低优先级 |
 | Hysteria2/AnyTLS 不支持 edit | 改这俩协议得重装 | ACME 重签复杂，等真有需求再加 |
+| install.sh 版本号检测匹子串 | "vdev" 含 "4.0.8" 子串误判"已是最新" | exact match 比较，低优先级 |
 | 单机部署，无 HA / 集群 | 单点故障 | 当前 scope 不需要 |
