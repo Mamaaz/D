@@ -10,11 +10,10 @@ import (
 type Protocol string
 
 const (
-	ProtocolSnell     Protocol = "snell"
-	ProtocolSingbox   Protocol = "singbox"
-	ProtocolReality   Protocol = "reality"
-	ProtocolHysteria2 Protocol = "hysteria2"
-	ProtocolAnyTLS    Protocol = "anytls"
+	ProtocolReality       Protocol = "reality"
+	ProtocolHysteria2     Protocol = "hysteria2"
+	ProtocolAnyTLS        Protocol = "anytls"
+	ProtocolAnyTLSReality Protocol = "anytls-reality"
 )
 
 // ServiceConfig 服务配置

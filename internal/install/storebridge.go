@@ -1,8 +1,6 @@
 package install
 
 import (
-	"fmt"
-
 	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
@@ -21,58 +19,6 @@ func upsertNode(n store.Node) {
 func removeNodeByType(t store.NodeType) {
 	if err := store.RemoveByType(t); err != nil {
 		utils.PrintWarn("从 nodes.json 移除失败 (不影响卸载): %v", err)
-	}
-}
-
-func storeNodeFromSnell(cfg SnellConfig) store.Node {
-	stlsVer := 3
-	if cfg.ShadowTLSVersion != "" {
-		stlsVer = parseIntOr(cfg.ShadowTLSVersion, 3)
-	}
-	snellVer := cfg.SnellVersion
-	if snellVer == "" {
-		snellVer = "4"
-	}
-	return store.Node{
-		ID:     "snell-shadowtls",
-		Name:   "Snell-ShadowTLS",
-		Type:   store.TypeSnellShadowTLS,
-		Server: cfg.ServerIP,
-		Port:   cfg.ShadowTLSPort,
-		Params: map[string]any{
-			"snell_port":          cfg.SnellPort,
-			"snell_psk":           cfg.SnellPSK,
-			"snell_version":       snellVer,
-			"shadow_tls_password": cfg.ShadowTLSPassword,
-			"shadow_tls_sni":      cfg.TLSDomain,
-			"shadow_tls_version":  stlsVer,
-		},
-	}
-}
-
-func parseIntOr(s string, fallback int) int {
-	var n int
-	if _, err := fmt.Sscanf(s, "%d", &n); err != nil || n == 0 {
-		return fallback
-	}
-	return n
-}
-
-func storeNodeFromSingbox(cfg SingboxConfig) store.Node {
-	return store.Node{
-		ID:     "ss2022-shadowtls",
-		Name:   "SS2022-ShadowTLS",
-		Type:   store.TypeSS2022ShadowTLS,
-		Server: cfg.ServerIP,
-		Port:   cfg.ShadowTLSPort,
-		Params: map[string]any{
-			"ss_port":             cfg.SSPort,
-			"method":              cfg.SSMethod,
-			"password":            cfg.SSPassword,
-			"shadow_tls_password": cfg.ShadowTLSPassword,
-			"shadow_tls_sni":      cfg.TLSDomain,
-			"shadow_tls_version":  3,
-		},
 	}
 }
 

@@ -40,57 +40,6 @@ func vlessRealityToQX(n *store.Node) string {
 	return strings.Join(parts, ", ")
 }
 
-// QX Snell + ShadowTLS：n.Port 是公网 ShadowTLS 端口；snell_version 在 store
-// 里是字符串。param key 名跟 Surge format 严格对齐 (避免拼写漂移)。
-func snellToQX(n *store.Node) string {
-	p := n.Params
-	v := defaultInt(parseStrInt(str(p, "snell_version")), 4)
-	stlsVer := defaultInt(num(p, "shadow_tls_version"), 3)
-	sni := str(p, "shadow_tls_sni")
-	parts := []string{
-		fmt.Sprintf("snell=%s:%d", n.Server, n.Port),
-		"psk=" + str(p, "snell_psk"),
-		fmt.Sprintf("version=%d", v),
-	}
-	if stp := str(p, "shadow_tls_password"); stp != "" {
-		parts = append(parts,
-			"obfs=shadow-tls",
-			"obfs-host="+sni,
-			"obfs-uri=/",
-			"shadow-tls-password="+stp,
-			fmt.Sprintf("shadow-tls-version=%d", stlsVer),
-			"shadow-tls-sni="+sni,
-		)
-	}
-	parts = append(parts, "fast-open=false", "udp-relay=true", "tag="+n.Name)
-	return strings.Join(parts, ", ")
-}
-
-// QX SS-2022 + ShadowTLS：n.Port 是公网 ShadowTLS 端口；param key 是
-// `method` + `password` (没 ss_ 前缀)。
-func ss2022ToQX(n *store.Node) string {
-	p := n.Params
-	stlsVer := defaultInt(num(p, "shadow_tls_version"), 3)
-	sni := str(p, "shadow_tls_sni")
-	parts := []string{
-		fmt.Sprintf("shadowsocks=%s:%d", n.Server, n.Port),
-		"method=" + str(p, "method"),
-		"password=" + str(p, "password"),
-	}
-	if stp := str(p, "shadow_tls_password"); stp != "" {
-		parts = append(parts,
-			"obfs=shadow-tls",
-			"obfs-host="+sni,
-			"obfs-uri=/",
-			"shadow-tls-password="+stp,
-			fmt.Sprintf("shadow-tls-version=%d", stlsVer),
-			"shadow-tls-sni="+sni,
-		)
-	}
-	parts = append(parts, "fast-open=false", "udp-relay=true", "tag="+n.Name)
-	return strings.Join(parts, ", ")
-}
-
 // QX Hysteria2: hysteria2= 块。连接 host 用域名 (LE 证书绑域名)，
 // 用 IP 连会触发证书校验失败。obfs (salamander) 是可选 server-side feature。
 func hysteria2ToQX(n *store.Node) string {

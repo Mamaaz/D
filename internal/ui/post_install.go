@@ -15,8 +15,7 @@ import (
 // 单个节点，不依赖订阅服务（测试用、或 subscribe 还没启用时）。
 //
 // 当前只支持 VLESS Reality (`vless://...`)。其他协议的标准 share URL 格式
-// 各异 (Snell 没标准、SS-2022 是 `ss://` 但 ShadowTLS 层无法编码、Hy2 是
-// `hy2://`、AnyTLS 没标准) — 待真有需求再加。
+// 各异 (Hy2 是 `hy2://`、AnyTLS 没标准) — 待真有需求再加。
 func printNodeShareURL(nodeType store.NodeType) {
 	s, err := store.LoadOrMigrate()
 	if err != nil {

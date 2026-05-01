@@ -23,10 +23,6 @@ var ErrUnknownNodeType = errors.New("unknown node type")
 // ToSurge returns one [Proxy] line (no trailing newline).
 func ToSurge(n *store.Node) (string, error) {
 	switch n.Type {
-	case store.TypeSnellShadowTLS:
-		return snellToSurge(n), nil
-	case store.TypeSS2022ShadowTLS:
-		return ss2022ToSurge(n), nil
 	case store.TypeVLESSReality:
 		return vlessRealityToSurge(n), nil
 	case store.TypeHysteria2:
@@ -42,10 +38,6 @@ func ToSurge(n *store.Node) (string, error) {
 // ToClash returns a Clash Meta proxy entry as map[string]any.
 func ToClash(n *store.Node) (map[string]any, error) {
 	switch n.Type {
-	case store.TypeSnellShadowTLS:
-		return snellToClash(n), nil
-	case store.TypeSS2022ShadowTLS:
-		return ss2022ToClash(n), nil
 	case store.TypeVLESSReality:
 		return vlessRealityToClash(n), nil
 	case store.TypeHysteria2:
@@ -59,13 +51,8 @@ func ToClash(n *store.Node) (map[string]any, error) {
 }
 
 // ToSingbox returns one or more sing-box outbound entries for the node.
-// ShadowTLS-fronted protocols emit two outbounds (outer ShadowTLS + inner SS).
 func ToSingbox(n *store.Node) ([]map[string]any, error) {
 	switch n.Type {
-	case store.TypeSnellShadowTLS:
-		return nil, fmt.Errorf("%w: snell has no sing-box outbound", ErrUnsupportedFormat)
-	case store.TypeSS2022ShadowTLS:
-		return ss2022ToSingbox(n), nil
 	case store.TypeVLESSReality:
 		return []map[string]any{vlessRealityToSingbox(n)}, nil
 	case store.TypeHysteria2:
@@ -95,10 +82,6 @@ func ToXray(n *store.Node) ([]map[string]any, error) {
 // Surge / Clash / sing-box 都不同，单独实现。
 func ToQX(n *store.Node) (string, error) {
 	switch n.Type {
-	case store.TypeSnellShadowTLS:
-		return snellToQX(n), nil
-	case store.TypeSS2022ShadowTLS:
-		return ss2022ToQX(n), nil
 	case store.TypeVLESSReality:
 		return vlessRealityToQX(n), nil
 	case store.TypeHysteria2:

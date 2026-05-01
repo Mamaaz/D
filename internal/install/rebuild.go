@@ -28,18 +28,6 @@ func RebuildAllServices() ([]string, error) {
 
 	tasks := []svc{
 		{
-			name:    "Snell + Shadow-TLS",
-			check:   func() bool { return utils.FileExists(SnellProxyConfigPath) },
-			rebuild: rebuildSnell,
-			units:   []string{"snell", "shadow-tls"},
-		},
-		{
-			name:    "SS2022 + Shadow-TLS",
-			check:   func() bool { return utils.FileExists(SingboxProxyConfigPath) },
-			rebuild: createSingboxService,
-			units:   []string{"sing-box"},
-		},
-		{
 			name:    "VLESS Reality",
 			check:   func() bool { return utils.FileExists(RealityProxyConfigPath) },
 			rebuild: rebuildReality,
@@ -56,6 +44,12 @@ func RebuildAllServices() ([]string, error) {
 			check:   func() bool { return utils.FileExists(AnyTLSProxyConfigPath) },
 			rebuild: createAnyTLSService,
 			units:   []string{"anytls"},
+		},
+		{
+			name:    "AnyTLS + Reality",
+			check:   func() bool { return utils.FileExists(AnyTLSRealityProxyConfigPath) },
+			rebuild: createAnyTLSRealityService,
+			units:   []string{AnyTLSRealityServiceName},
 		},
 	}
 
@@ -128,28 +122,6 @@ func rebuildReality() error {
 		return fmt.Errorf("create xray reality config: %w", err)
 	}
 	return createRealityService()
-}
-
-// rebuildSnell needs the original SnellConfig because shadow-tls.service's
-// ExecStart embeds runtime parameters (port, sni, password). We reconstitute
-// the cfg from the legacy .txt the service was originally installed with.
-func rebuildSnell() error {
-	kv, err := ParseConfigFile(SnellProxyConfigPath)
-	if err != nil {
-		return fmt.Errorf("parse snell config: %w", err)
-	}
-	cfg := SnellConfig{
-		ServerIP:          kv["SERVER_IP"],
-		IPVersion:         kv["IP_VERSION"],
-		SnellPort:         atoi(kv["SNELL_PORT"]),
-		SnellPSK:          kv["SNELL_PSK"],
-		ShadowTLSPort:     atoi(kv["SHADOW_TLS_PORT"]),
-		ShadowTLSPassword: kv["SHADOW_TLS_PASSWORD"],
-		TLSDomain:         kv["TLS_DOMAIN"],
-		SnellVersion:      kv["SNELL_VERSION"],
-		ShadowTLSVersion:  kv["SHADOW_TLS_VERSION"],
-	}
-	return createSnellServices(cfg)
 }
 
 func atoi(s string) int {

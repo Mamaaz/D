@@ -11,8 +11,6 @@ import (
 // LegacyPaths is the set of pre-store .txt config files this package can
 // migrate. Kept exported so install/uninstall code can detect/remove them.
 var LegacyPaths = []string{
-	"/etc/snell-proxy-config.txt",
-	"/etc/singbox-proxy-config.txt",
 	"/etc/reality-proxy-config.txt",
 	"/etc/hysteria2-proxy-config.txt",
 	"/etc/anytls-proxy-config.txt",
@@ -73,38 +71,6 @@ func readLegacyTxt(path string) (map[string]string, error) {
 
 func legacyToNode(kv map[string]string) (Node, bool) {
 	switch kv["TYPE"] {
-	case "snell":
-		return Node{
-			ID:     "snell-shadowtls",
-			Name:   "Snell-ShadowTLS",
-			Type:   TypeSnellShadowTLS,
-			Server: kv["SERVER_IP"],
-			Port:   atoi(kv["SHADOW_TLS_PORT"]),
-			Params: map[string]any{
-				"snell_port":          atoi(kv["SNELL_PORT"]),
-				"snell_psk":           kv["SNELL_PSK"],
-				"snell_version":       kv["SNELL_VERSION"],
-				"shadow_tls_password": kv["SHADOW_TLS_PASSWORD"],
-				"shadow_tls_sni":      kv["TLS_DOMAIN"],
-				"shadow_tls_version":  atoiOr(kv["SHADOW_TLS_VERSION"], 3),
-			},
-		}, true
-	case "singbox":
-		return Node{
-			ID:     "ss2022-shadowtls",
-			Name:   "SS2022-ShadowTLS",
-			Type:   TypeSS2022ShadowTLS,
-			Server: kv["SERVER_IP"],
-			Port:   atoi(kv["SHADOW_TLS_PORT"]),
-			Params: map[string]any{
-				"ss_port":             atoi(kv["SS_PORT"]),
-				"method":              kv["SS_METHOD"],
-				"password":            kv["SS_PASSWORD"],
-				"shadow_tls_password": kv["SHADOW_TLS_PASSWORD"],
-				"shadow_tls_sni":      kv["TLS_DOMAIN"],
-				"shadow_tls_version":  3,
-			},
-		}, true
 	case "reality":
 		return Node{
 			ID:     "vless-reality",
@@ -157,16 +123,5 @@ func legacyToNode(kv map[string]string) (Node, bool) {
 
 func atoi(s string) int {
 	n, _ := strconv.Atoi(s)
-	return n
-}
-
-func atoiOr(s string, fallback int) int {
-	if s == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return fallback
-	}
 	return n
 }

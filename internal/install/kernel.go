@@ -14,7 +14,7 @@ import (
 // "kernel" 这层是新增的，原来的 protocol-level Update* 函数继续用——
 // kernel.Upgrade 不重写它们，只编排顺序 + 共享 binary 的协议复用。
 type Kernel struct {
-	Name        string   // 显示名: "xray-core", "sing-box", "snell-server", "shadow-tls"
+	Name        string   // 显示名: "xray-core", "sing-box"
 	BinaryPath  string
 	Repo        string   // GitHub "owner/repo"，Releases API 拉 latest
 	DefaultVer  string   // 拉不到 latest 时的 fallback
@@ -34,19 +34,17 @@ func ListKernels() []Kernel {
 		s = &store.Store{}
 	}
 
-	hasReality, hasSS2022, hasH2, hasAnyTLS, hasSnell := false, false, false, false, false
+	hasReality, hasH2, hasAnyTLS, hasAnyTLSReality := false, false, false, false
 	for _, n := range s.Nodes {
 		switch n.Type {
 		case store.TypeVLESSReality:
 			hasReality = true
-		case store.TypeSS2022ShadowTLS:
-			hasSS2022 = true
 		case store.TypeHysteria2:
 			hasH2 = true
 		case store.TypeAnyTLS:
 			hasAnyTLS = true
-		case store.TypeSnellShadowTLS:
-			hasSnell = true
+		case store.TypeAnyTLSReality:
+			hasAnyTLSReality = true
 		}
 	}
 
@@ -63,17 +61,13 @@ func ListKernels() []Kernel {
 		})
 	}
 	// sing-box 是多协议共享内核，UsedBy / Services 累加
-	if hasSS2022 || hasH2 || hasAnyTLS {
+	if hasH2 || hasAnyTLS || hasAnyTLSReality {
 		k := Kernel{
 			Name: "sing-box", BinaryPath: SingboxBinaryPath,
 			Repo: "SagerNet/sing-box", DefaultVer: utils.DefaultSingboxVersion,
 			VersionCmd:  []string{"version"},
 			VersionGrep: "sing-box version ",
 			download:    downloadSingbox,
-		}
-		if hasSS2022 {
-			k.UsedBy = append(k.UsedBy, "SS-2022 + ShadowTLS")
-			k.Services = append(k.Services, "sing-box")
 		}
 		if hasH2 {
 			k.UsedBy = append(k.UsedBy, "Hysteria2")
@@ -83,29 +77,17 @@ func ListKernels() []Kernel {
 			k.UsedBy = append(k.UsedBy, "AnyTLS")
 			k.Services = append(k.Services, "anytls")
 		}
+		if hasAnyTLSReality {
+			k.UsedBy = append(k.UsedBy, "AnyTLS + Reality")
+			k.Services = append(k.Services, "anytls-reality")
+		}
 		out = append(out, k)
-	}
-	if hasSnell {
-		out = append(out, Kernel{
-			Name: "snell-server", BinaryPath: SnellBinaryPath,
-			Repo: "powerpuffpenguin/shellinabox-snell-mirror", // 占位, snell 私有
-			DefaultVer: "v5.0.0",
-			UsedBy:     []string{"Snell + ShadowTLS"},
-			Services:   []string{"snell"},
-			// snell 没标准 version 命令；从 .txt 读 SNELL_VERSION 字段
-		})
-		out = append(out, Kernel{
-			Name: "shadow-tls", BinaryPath: ShadowTLSBinaryPath,
-			Repo: "ihciah/shadow-tls", DefaultVer: "v0.2.25",
-			UsedBy:   []string{"Snell + ShadowTLS"},
-			Services: []string{"shadow-tls"},
-		})
 	}
 	return out
 }
 
-// CurrentVersion 问 binary 自己的版本；问不出来 fallback 到从 .txt 读
-// (如 snell 没 version 命令时)。返回空串表示不知道。
+// CurrentVersion 问 binary 自己的版本；问不出来 fallback 到从 .txt 读。
+// 返回空串表示不知道。
 func (k Kernel) CurrentVersion() string {
 	if !utils.FileExists(k.BinaryPath) {
 		return ""
@@ -128,18 +110,10 @@ func (k Kernel) CurrentVersion() string {
 			return kv["SINGBOX_VERSION"] // 字段名兼容旧 schema
 		}
 	case "sing-box":
-		for _, p := range []string{SingboxProxyConfigPath, Hysteria2ProxyConfigPath, AnyTLSProxyConfigPath} {
+		for _, p := range []string{Hysteria2ProxyConfigPath, AnyTLSProxyConfigPath, AnyTLSRealityProxyConfigPath} {
 			if kv, err := ParseConfigFile(p); err == nil && kv["SINGBOX_VERSION"] != "" {
 				return kv["SINGBOX_VERSION"]
 			}
-		}
-	case "snell-server":
-		if kv, err := ParseConfigFile(SnellProxyConfigPath); err == nil {
-			return kv["SNELL_VERSION"]
-		}
-	case "shadow-tls":
-		if kv, err := ParseConfigFile(SnellProxyConfigPath); err == nil {
-			return kv["SHADOW_TLS_VERSION"]
 		}
 	}
 	return ""
@@ -155,9 +129,6 @@ func (k Kernel) LatestVersion() string {
 
 // Upgrade 升级一个内核：stop services → backup binary → download new →
 // start services。失败时 rollback binary。
-//
-// 注意：snell-server / shadow-tls 没有 download 函数指针 (用户自己装好的，
-// 升级走 install_snell 重装路径)，会返回错误提示用户走重装。
 func (k Kernel) Upgrade() error {
 	if k.download == nil {
 		return fmt.Errorf("%s 内核暂不支持自动升级，请走 install 重装相关协议", k.Name)
@@ -215,7 +186,7 @@ func updateVersionInTxt(kernelName, latest string) {
 			_ = SaveConfigFile(RealityProxyConfigPath, kv)
 		}
 	case "sing-box":
-		for _, p := range []string{SingboxProxyConfigPath, Hysteria2ProxyConfigPath, AnyTLSProxyConfigPath} {
+		for _, p := range []string{Hysteria2ProxyConfigPath, AnyTLSProxyConfigPath, AnyTLSRealityProxyConfigPath} {
 			if kv, err := ParseConfigFile(p); err == nil && kv["SINGBOX_VERSION"] != "" {
 				kv["SINGBOX_VERSION"] = latest
 				_ = SaveConfigFile(p, kv)
