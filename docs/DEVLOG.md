@@ -80,6 +80,11 @@
 | v4.0.6 | subscribe drop root + edit 扩到 Snell/SS2022 + DEPLOY sync | PR #17 |
 | v4.0.7 | **Reality 内核切到 xray-core** | PR #18 |
 | v4.0.8 | `kernel` 子命令（统一管理 list/upgrade） | PR #19 |
+| v4.0.9 | TUI 服务状态表 reality SystemdName 跟上 v4.0.7 切换 | PR #21 |
+| v4.0.10 | post-install 自动打印订阅 URL（5 种格式 + XSurge 提示）| PR #22 |
+| v4.0.11 | `store.Save` 写完自动 chown 给 proxy-manager 用户 | PR #23 |
+| v4.0.12 | post-install 末尾追加 json URL ASCII QR | PR #24 |
+| v4.0.13 | 单节点 vless:// share URL + QR（不依赖订阅服务）| PR #25 |
 
 每个版本都在 GitHub Releases 自动构建（amd64 + arm64 + checksums），
 `bash <(curl -sL .../install.sh) update` 一键升级。
@@ -149,6 +154,33 @@ TUI 主菜单 #14 把整个流程串起来一键完成。
 198.18.x.x，导致扫描结果失真。XSurge 测试器/扫描器 dialog 加了「直连规则」
 按钮一键复制 PROCESS-NAME=DIRECT 规则。
 
+### 8. nodes.json 文件 ownership：root 写 / proxy-manager 读
+
+v4.0.6 把 subscribe service 降到 `User=proxy-manager` 后冒出新 bug：root 跑
+install 写出 root-owned `/etc/proxy-manager/nodes.json`，subscribe service
+读不到，全部订阅 URL 返 500 "store unavailable"。v4.0.11 修：`store.saveLocked`
+写完后调 `os.Chown` best-effort 把文件 + 目录所有权改给 proxy-manager
+（用户存在则改，不存在静默跳过——subscribe enable 时会自己创 + 全量 chown）。
+
+### 9. Reality transport 选型：默认 TCP, 不用 XHTTP
+
+xray 26.x 加了 XHTTP transport（mimic HTTP/2 fingerprint）。但默认仍用
+`network: tcp` 因为：
+- 客户端兼容性：sing-box / V2Box / NekoBox / Shadowrocket 多数对 XHTTP
+  支持参差，TCP 是 Reality 全客户端通吃的最大公约数
+- 协议成熟度：XHTTP 2024 合并，spec 改过几次；TCP 是 Reality 一开始就有的
+- 抗审查实测：Reality 强度来自 TLS 1.3 mimic + X25519，transport 层差异小
+未来如撞墙，加成 `proxy-manager edit reality --field transport --value xhttp`
+opt-in（跟 MLKEM-768 同样策略），不动默认。
+
+### 10. post-install QR：仅给 vless:// share，不给 json URL
+
+v4.0.12 给 json URL 也打了 QR；v4.0.13 加了 vless:// share URL 的 QR。
+后来发现：json URL 的 QR 没用——XSurge / Surge 的"添加订阅"输入框只接受
+复制粘贴的 URL 字符串，扫不进去。手机扫码的真实场景是**单节点 share URL**
+（vless://...），扫了之后客户端立刻有这一个节点。所以删掉 json QR 只保留
+vless:// QR。
+
 ---
 
 ## 端到端验证
@@ -173,10 +205,14 @@ Mac (XSurge)：
 
 - **Hysteria2/AnyTLS 的 edit**：域名改动涉及 ACME 重签，复杂度比 Reality 编辑翻倍。等真有人提 issue 再做
 - **install.sh 版本号检测**：`grep` 子串导致 "vdev" 包含 "4.0.8" 误判已是最新。改 exact match 五分钟事，低优先级
+- **VLESS 多变体（WS/gRPC/XHTTP/CDN）**：v2ray-agent 全都支持，但每个变体都要 install 流程 + LE 证书 + edit + doctor + 订阅生成器。除非 :443 被精准封，否则 Reality 已经够。**唯一有独立价值的是 WS+TLS+CDN**（藏 IP），等真撞墙再加
+- **Reality transport=XHTTP**：xray 26.x 新特性，客户端兼容性差。同样按 opt-in edit field 加，不默认换
+- **MLKEM-768 后量子**：xray 支持，但客户端兼容性差。同上策略
 - **共享证书 + 多协议复用 :443**：v2ray-agent 那种 SNI fronting，工程量大，对单机自用 scope 没必要
 - **nodes.json 自动 .bak**：rotate-token / install 之前自动备份。健壮性提升，没人踩坑过
 - **DOH only / DoT 强制**：autocert 在某些 ISP 污染 DNS 的网络下可能 challenge 失败。当前 VPS 默认 DNS 已经够用
 - **XSurge Settings panel (M2.5)**：现在 autoSyncMinutes 改要手动编辑 JSON。出真实需求再做
+- **XSurge `latestNodesBySub` 持久化**：当前 in-memory only，重启清空（v4.0.12 修了泄漏 bug 后这个是 by-design）。如果真要 cache 持久也可以加
 
 ---
 
