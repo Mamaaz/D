@@ -214,6 +214,8 @@ func ExecuteAction(action string) {
 		doInstallHysteria2()
 	case "install_anytls":
 		doInstallAnyTLS()
+	case "install_anytls_reality":
+		doInstallAnyTLSReality()
 	case "view_config":
 		doViewConfig()
 	case "view_logs":
@@ -291,6 +293,17 @@ func doInstallAnyTLS() {
 	}
 	waitForEnter()
 }
+
+func doInstallAnyTLSReality() {
+	_, err := install.InstallAnyTLSReality()
+	if err != nil {
+		utils.PrintError("安装失败: %v", err)
+	} else {
+		printSubscribeURLs()
+	}
+	waitForEnter()
+}
+
 
 // =========================================
 // 查看配置
@@ -555,7 +568,7 @@ func RunSimpleMenu() {
 		showStatus()
 		showMenu()
 
-		choice := utils.PromptInt("请选择", 0, 0, 16)
+		choice := utils.PromptInt("请选择", 0, 0, 17)
 
 		switch choice {
 		case 1:
@@ -590,6 +603,8 @@ func RunSimpleMenu() {
 			doSubscribeMenu()
 		case 16:
 			doKernelUpgradeAll()
+		case 17:
+			doInstallAnyTLSReality()
 		case 0:
 			fmt.Println("再见！")
 			return
@@ -663,6 +678,8 @@ func showMenu() {
 	fmt.Printf("%s│%s    %s4.%s 安装 Hysteria2 (Let's Encrypt)                       %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s    %s5.%s 安装 AnyTLS (Let's Encrypt)                          %s│%s\n",
+		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s│%s    %s17.%s 安装 AnyTLS + Reality (无需 LE 证书)                %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s管理服务%s                                                 %s│%s\n",

@@ -33,6 +33,8 @@ func ToSurge(n *store.Node) (string, error) {
 		return hysteria2ToSurge(n), nil
 	case store.TypeAnyTLS:
 		return anytlsToSurge(n), nil
+	case store.TypeAnyTLSReality:
+		return anytlsRealityToSurge(n), nil
 	}
 	return "", fmt.Errorf("%w: %q", ErrUnknownNodeType, n.Type)
 }
@@ -50,6 +52,8 @@ func ToClash(n *store.Node) (map[string]any, error) {
 		return hysteria2ToClash(n), nil
 	case store.TypeAnyTLS:
 		return anytlsToClash(n), nil
+	case store.TypeAnyTLSReality:
+		return anytlsRealityToClash(n), nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownNodeType, n.Type)
 }
@@ -68,6 +72,8 @@ func ToSingbox(n *store.Node) ([]map[string]any, error) {
 		return []map[string]any{hysteria2ToSingbox(n)}, nil
 	case store.TypeAnyTLS:
 		return []map[string]any{anytlsToSingbox(n)}, nil
+	case store.TypeAnyTLSReality:
+		return []map[string]any{anytlsRealityToSingbox(n)}, nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownNodeType, n.Type)
 }
@@ -99,6 +105,8 @@ func ToQX(n *store.Node) (string, error) {
 		return hysteria2ToQX(n), nil
 	case store.TypeAnyTLS:
 		return anytlsToQX(n), nil
+	case store.TypeAnyTLSReality:
+		return anytlsRealityToQX(n), nil
 	}
 	return "", fmt.Errorf("%w: %q", ErrUnknownNodeType, n.Type)
 }

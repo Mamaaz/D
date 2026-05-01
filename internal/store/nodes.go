@@ -34,6 +34,12 @@ const (
 	TypeVLESSReality      NodeType = "vless-reality"
 	TypeHysteria2         NodeType = "hysteria2"
 	TypeAnyTLS            NodeType = "anytls"
+	// 新协议组合 (v4.0.25): Reality TLS 层 + AnyTLS 协议
+	// 不需要 LE 证书 / 域名，复用 xray x25519 keypair 生成
+	// 注：SS-2022 + Reality 暂未实现 — sing-box shadowsocks inbound 不支持
+	// tls 字段，要 shadow-tls v0.2.7+ Reality 模式做外层包装才行 (类似
+	// Snell+ShadowTLS)，是真实的额外工程量。
+	TypeAnyTLSReality     NodeType = "anytls-reality"
 )
 
 // Node is a single installed proxy. Params holds protocol-specific fields;
