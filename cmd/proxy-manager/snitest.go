@@ -7,13 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mamaaz/proxy-manager/internal/sni"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
 
 // runSNITest 是 `proxy-manager sni-test <hostname>` 子命令的入口。
-//
-// 从 VPS 视角对一个候选 SNI 做 TLS 1.3 + X25519 握手 + ALPN h2 协商 + 证书
-// 链验证 + HTTP HEAD 探测，输出结构化判定。
 func runSNITest(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "用法: proxy-manager sni-test <hostname>")
@@ -30,7 +28,7 @@ func runSNITest(args []string) {
 	fmt.Printf("%s=== SNI Test: %s ===%s\n", utils.ColorCyan, host, utils.ColorReset)
 	fmt.Println()
 
-	r := probeSNI(host, 5*time.Second)
+	r := sni.Probe(host, 5*time.Second)
 	renderProbe(r)
 
 	if !r.Suitable() {
@@ -38,7 +36,7 @@ func runSNITest(args []string) {
 	}
 }
 
-func renderProbe(r *SNIProbeResult) {
+func renderProbe(r *sni.ProbeResult) {
 	if r.DNSError != nil {
 		fmt.Printf("  %sDNS 解析失败:%s %v\n", utils.ColorRed, utils.ColorReset, r.DNSError)
 		return
