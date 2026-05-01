@@ -374,7 +374,15 @@ do_update() {
         return
     fi
     
-    read -p "确认更新？(y/n): " confirm
+    # 走 /dev/tty 读,避免 `curl ... | bash -s update` 模式下 stdin 已被脚本
+    # 本体占用、read 直接 EOF 退出 1 (set -e 又把它放大成静默失败)。无 tty
+    # 时(CI / 后台 cron)默认确认,允许全自动升级。
+    if [ -r /dev/tty ]; then
+        read -p "确认更新？(y/n): " confirm < /dev/tty
+    else
+        log_info "无交互终端,默认确认更新"
+        confirm=y
+    fi
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
         echo "更新已取消"
         exit 0
