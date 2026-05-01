@@ -59,6 +59,13 @@ func Install(domain string, port int, email string) (urls map[string]string, err
 	if err != nil {
 		return nil, fmt.Errorf("找不到当前可执行文件路径: %w", err)
 	}
+
+	// systemd 的 ReadWritePaths 要求路径在服务启动前已存在，否则
+	// namespace 挂载阶段就会 fail (status=226/NAMESPACE)。autocert
+	// 自己会按需建子目录，但这里得先把根路径创出来。
+	if err := os.MkdirAll(CertCacheDir, 0700); err != nil {
+		return nil, fmt.Errorf("创建 autocert 缓存目录失败: %w", err)
+	}
 	args := []string{"subscribe", "serve", "--domain", domain, "--port", strconv.Itoa(port)}
 	if email != "" {
 		args = append(args, "--email", email)
