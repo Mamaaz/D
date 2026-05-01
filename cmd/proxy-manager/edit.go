@@ -50,74 +50,12 @@ func runEdit(args []string) {
 	switch strings.ToLower(protocol) {
 	case "reality", "vless-reality", "vless":
 		runEditReality(field, value)
-	case "snell", "snell-shadowtls":
-		runEditByProtocol("Snell + Shadow-TLS",
-			install.CurrentSnellFields, install.EditSnell, field, value)
-	case "ss2022", "ss-2022", "singbox", "ss2022-shadowtls":
-		runEditByProtocol("SS-2022 + Shadow-TLS",
-			install.CurrentSingboxFields, install.EditSingbox, field, value)
 	default:
 		fmt.Fprintf(os.Stderr, "暂未支持编辑该协议: %s\n", protocol)
-		fmt.Fprintln(os.Stderr, "支持的协议: reality / snell / ss2022")
-		fmt.Fprintln(os.Stderr, "Hysteria2 / AnyTLS 涉及 ACME 证书重签，复杂度更高，暂请用 install 重装。")
+		fmt.Fprintln(os.Stderr, "目前只支持: reality")
+		fmt.Fprintln(os.Stderr, "Hysteria2 / AnyTLS 涉及 ACME 证书重签，复杂度更高；其他协议直接 install 重装。")
 		os.Exit(2)
 	}
-}
-
-// runEditByProtocol 是 Reality 之外协议的通用 edit 流程。Reality 那个
-// 流程历史悠久不重构，这个函数复用给 Snell / SS2022 / 未来其他协议。
-func runEditByProtocol(
-	displayName string,
-	getFields func() ([]install.EditableRealityField, error),
-	editFn func(field, value string) error,
-	field, value string,
-) {
-	fields, err := getFields()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "读取 %s 配置失败: %v\n", displayName, err)
-		os.Exit(1)
-	}
-	if field == "" {
-		fmt.Println()
-		fmt.Printf("%s%s 当前可编辑字段:%s\n", utils.ColorCyan, displayName, utils.ColorReset)
-		for i, f := range fields {
-			fmt.Printf("  %d. %-22s = %s\n", i+1, f.DisplayName, f.CurrentValue)
-			fmt.Printf("       %s%s%s\n", utils.ColorYellow, f.Description, utils.ColorReset)
-		}
-		fmt.Println("  0. 取消")
-		fmt.Println()
-		idx := utils.PromptInt("选择要修改的字段", 0, 0, len(fields))
-		if idx == 0 {
-			fmt.Println("已取消")
-			return
-		}
-		picked := fields[idx-1]
-		field = picked.Name
-		fmt.Println()
-		fmt.Printf("当前 %s: %s%s%s\n", picked.DisplayName, utils.ColorCyan, picked.CurrentValue, utils.ColorReset)
-		newVal := utils.PromptInput(fmt.Sprintf("输入新 %s (回车取消)", picked.DisplayName), "")
-		if newVal == "" {
-			fmt.Println("已取消")
-			return
-		}
-		value = newVal
-		fmt.Println()
-		if !utils.PromptConfirm(fmt.Sprintf("确认把 %s 改为 %s 并重启服务?", picked.DisplayName, value)) {
-			fmt.Println("已取消")
-			return
-		}
-	}
-	if err := editFn(field, value); err != nil {
-		fmt.Fprintf(os.Stderr, "%s修改失败:%s %v\n", utils.ColorRed, utils.ColorReset, err)
-		os.Exit(1)
-	}
-	fmt.Println()
-	fmt.Printf("%s✓ %s 已更新%s\n", utils.ColorGreen, field, utils.ColorReset)
-	fmt.Println()
-	fmt.Println("接下来：")
-	fmt.Println("  - 客户端要拿新配置: proxy-manager export --format=surge (或其他)")
-	fmt.Println("  - 如已启用订阅服务: 客户端订阅会自动同步")
-	fmt.Println("  - 验证: proxy-manager doctor")
 }
 
 func pickInstalledProtocol(nodes []store.Node) string {
@@ -126,9 +64,7 @@ func pickInstalledProtocol(nodes []store.Node) string {
 		return ""
 	}
 	supported := map[store.NodeType]string{
-		store.TypeVLESSReality:    "VLESS Reality",
-		store.TypeSnellShadowTLS:  "Snell + Shadow-TLS",
-		store.TypeSS2022ShadowTLS: "SS-2022 + Shadow-TLS",
+		store.TypeVLESSReality: "VLESS Reality",
 	}
 	type opt struct {
 		key  string

@@ -81,9 +81,8 @@ func runSubprocess(args ...string) {
 	}
 }
 
-// doKernelUpgradeAll 是菜单 #16：一键升级所有已装内核 (xray / sing-box /
-// snell / shadow-tls)。等价于 CLI 的 `proxy-manager kernel upgrade --all`，
-// 但 TUI 用户不用记命令。
+// doKernelUpgradeAll 是菜单 #15：一键升级所有已装内核 (xray / sing-box)。
+// 等价于 CLI 的 `proxy-manager kernel upgrade --all`，但 TUI 用户不用记命令。
 func doKernelUpgradeAll() {
 	kernels := install.ListKernels()
 	if len(kernels) == 0 {

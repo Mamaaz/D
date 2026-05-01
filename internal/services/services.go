@@ -35,18 +35,6 @@ type Service struct {
 //
 // SystemdName 跟着内核走 (v4.0.7 起 reality unit 是 xray-reality)。
 var Services = map[string]Service{
-	"snell": {
-		Name:        "snell",
-		DisplayName: "Snell + Shadow-TLS",
-		ConfigPath:  "/etc/snell-proxy-config.txt",
-		SystemdName: "snell",
-	},
-	"singbox": {
-		Name:        "singbox",
-		DisplayName: "Sing-box (SS-2022)",
-		ConfigPath:  "/etc/singbox-proxy-config.txt",
-		SystemdName: "sing-box",
-	},
 	"reality": {
 		Name:        "reality",
 		DisplayName: "VLESS Reality",

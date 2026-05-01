@@ -55,11 +55,10 @@ type Model struct {
 
 // 菜单项列表
 var menuItems = []list.Item{
-	MenuItem{title: "1. 安装 Snell + Shadow-TLS", description: "Surge 专用协议", action: "install_snell"},
-	MenuItem{title: "2. 安装 SS-2022 + Shadow-TLS", description: "通用 Shadowsocks", action: "install_singbox"},
-	MenuItem{title: "3. 安装 VLESS Reality", description: "抗检测协议", action: "install_reality"},
-	MenuItem{title: "4. 安装 Hysteria2", description: "高速 QUIC 协议", action: "install_hysteria2"},
-	MenuItem{title: "5. 安装 AnyTLS", description: "抗 TLS 指纹检测", action: "install_anytls"},
+	MenuItem{title: "1. 安装 VLESS Reality", description: "抗检测，xray 内核", action: "install_reality"},
+	MenuItem{title: "2. 安装 Hysteria2", description: "高速 QUIC 协议", action: "install_hysteria2"},
+	MenuItem{title: "3. 安装 AnyTLS", description: "Surge 原生支持", action: "install_anytls"},
+	MenuItem{title: "4. 安装 AnyTLS + Reality", description: "无证书，sing-box / mihomo / QX 客户端", action: "install_anytls_reality"},
 	MenuItem{title: "6. 查看服务配置", description: "显示已安装服务配置", action: "view_config"},
 	MenuItem{title: "7. 查看服务日志", description: "显示服务运行日志", action: "view_logs"},
 	MenuItem{title: "8. 更新服务", description: "更新已安装服务", action: "update_service"},
@@ -204,10 +203,6 @@ func Run() error {
 // ExecuteAction 执行指定操作
 func ExecuteAction(action string) {
 	switch action {
-	case "install_snell":
-		doInstallSnell()
-	case "install_singbox":
-		doInstallSingbox()
 	case "install_reality":
 		doInstallReality()
 	case "install_hysteria2":
@@ -242,26 +237,6 @@ func ExecuteAction(action string) {
 // =========================================
 // 安装操作
 // =========================================
-
-func doInstallSnell() {
-	_, err := install.InstallSnell()
-	if err != nil {
-		utils.PrintError("安装失败: %v", err)
-	} else {
-		printSubscribeURLs()
-	}
-	waitForEnter()
-}
-
-func doInstallSingbox() {
-	_, err := install.InstallSingbox()
-	if err != nil {
-		utils.PrintError("安装失败: %v", err)
-	} else {
-		printSubscribeURLs()
-	}
-	waitForEnter()
-}
 
 func doInstallReality() {
 	_, err := install.InstallReality()
@@ -311,8 +286,6 @@ func doInstallAnyTLSReality() {
 
 func doViewConfig() {
 	options := []string{
-		"Snell + Shadow-TLS",
-		"Sing-box (SS-2022)",
 		"VLESS Reality",
 		"Hysteria2",
 		"AnyTLS",
@@ -322,14 +295,10 @@ func doViewConfig() {
 	choice := utils.PromptSelect("选择要查看的配置:", options)
 	switch choice {
 	case 1:
-		install.ViewSnellConfig()
-	case 2:
-		install.ViewSingboxConfig()
-	case 3:
 		install.ViewRealityConfig()
-	case 4:
+	case 2:
 		install.ViewHysteria2Config()
-	case 5:
+	case 3:
 		install.ViewAnyTLSConfig()
 	}
 	waitForEnter()
@@ -341,12 +310,10 @@ func doViewConfig() {
 
 func doViewLogs() {
 	options := []string{
-		"Snell",
-		"Shadow-TLS",
-		"Sing-box",
-		"Reality",
+		"VLESS Reality",
 		"Hysteria2",
 		"AnyTLS",
+		"AnyTLS + Reality",
 		"返回",
 	}
 
@@ -354,17 +321,13 @@ func doViewLogs() {
 	var service string
 	switch choice {
 	case 1:
-		service = "snell"
+		service = "xray-reality"
 	case 2:
-		service = "shadow-tls"
-	case 3:
-		service = "sing-box"
-	case 4:
-		service = "sing-box-reality"
-	case 5:
 		service = "hysteria2"
-	case 6:
+	case 3:
 		service = "anytls"
+	case 4:
+		service = "anytls-reality"
 	default:
 		return
 	}
@@ -382,11 +345,10 @@ func doViewLogs() {
 
 func doUpdateService() {
 	options := []string{
-		"Snell + Shadow-TLS",
-		"Sing-box (SS-2022)",
 		"VLESS Reality",
 		"Hysteria2",
 		"AnyTLS",
+		"AnyTLS + Reality",
 		"返回",
 	}
 
@@ -394,14 +356,14 @@ func doUpdateService() {
 	var err error
 	switch choice {
 	case 1:
-		err = install.UpdateSnell()
-	case 2:
-		err = install.UpdateSingbox()
-	case 3:
 		err = install.UpdateReality()
-	case 4:
+	case 2:
 		err = install.UpdateHysteria2()
-	case 5:
+	case 3:
+		err = install.UpdateAnyTLS()
+	case 4:
+		// AnyTLS+Reality 用 sing-box，复用 UpdateAnyTLS 路径升级 sing-box binary。
+		// 实际 reality 配置不需重签证，service-rebuild 即可让新 binary 生效。
 		err = install.UpdateAnyTLS()
 	}
 	if err != nil {
@@ -416,18 +378,17 @@ func doUpdateService() {
 
 func doUninstallService() {
 	options := []string{
-		"Snell + Shadow-TLS",
-		"Sing-box (SS-2022)",
 		"VLESS Reality",
 		"Hysteria2",
 		"AnyTLS",
+		"AnyTLS + Reality",
 		"返回",
 	}
 
 	choice := utils.PromptSelect("选择要卸载的服务:", options)
 
 	// 确认卸载
-	if choice >= 1 && choice <= 5 {
+	if choice >= 1 && choice <= 4 {
 		if !utils.PromptConfirm("确认卸载？") {
 			return
 		}
@@ -435,15 +396,13 @@ func doUninstallService() {
 
 	switch choice {
 	case 1:
-		install.UninstallSnell()
-	case 2:
-		install.UninstallSingbox()
-	case 3:
 		install.UninstallReality()
-	case 4:
+	case 2:
 		install.UninstallHysteria2()
-	case 5:
+	case 3:
 		install.UninstallAnyTLS()
+	case 4:
+		install.UninstallAnyTLSReality()
 	}
 	waitForEnter()
 }
@@ -568,43 +527,39 @@ func RunSimpleMenu() {
 		showStatus()
 		showMenu()
 
-		choice := utils.PromptInt("请选择", 0, 0, 17)
+		choice := utils.PromptInt("请选择", 0, 0, 15)
 
 		switch choice {
 		case 1:
-			doInstallSnell()
-		case 2:
-			doInstallSingbox()
-		case 3:
 			doInstallReality()
-		case 4:
+		case 2:
 			doInstallHysteria2()
-		case 5:
+		case 3:
 			doInstallAnyTLS()
-		case 6:
-			doViewConfig()
-		case 7:
-			doViewLogs()
-		case 8:
-			doUpdateService()
-		case 9:
-			doUninstallService()
-		case 10:
-			doRenewCert()
-		case 11:
-			doViewCert()
-		case 12:
-			doUpdatePM()
-		case 13:
-			doUninstallPM()
-		case 14:
-			doRankSNI()
-		case 15:
-			doSubscribeMenu()
-		case 16:
-			doKernelUpgradeAll()
-		case 17:
+		case 4:
 			doInstallAnyTLSReality()
+		case 5:
+			doViewConfig()
+		case 6:
+			doViewLogs()
+		case 7:
+			doUpdateService()
+		case 8:
+			doUninstallService()
+		case 9:
+			doRenewCert()
+		case 10:
+			doViewCert()
+		case 11:
+			doUpdatePM()
+		case 12:
+			doUninstallPM()
+		case 13:
+			doRankSNI()
+		case 14:
+			doSubscribeMenu()
+		case 15:
+			doKernelUpgradeAll()
 		case 0:
 			fmt.Println("再见！")
 			return
@@ -669,54 +624,50 @@ func showMenu() {
 	fmt.Printf("%s┌─────────────────────────────────────────────────────────────┐%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s安装服务%s                                                 %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s1.%s 安装 Snell + Shadow-TLS                              %s│%s\n",
+	fmt.Printf("%s│%s    %s1.%s 安装 VLESS Reality (xray)                            %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s2.%s 安装 Sing-box (SS-2022 + Shadow-TLS)                 %s│%s\n",
+	fmt.Printf("%s│%s    %s2.%s 安装 Hysteria2 (LE 证书)                             %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s3.%s 安装 VLESS Reality                                   %s│%s\n",
+	fmt.Printf("%s│%s    %s3.%s 安装 AnyTLS (LE 证书 — Surge 原生)                   %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s4.%s 安装 Hysteria2 (Let's Encrypt)                       %s│%s\n",
-		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s5.%s 安装 AnyTLS (Let's Encrypt)                          %s│%s\n",
-		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s17.%s 安装 AnyTLS + Reality (无需 LE 证书)                %s│%s\n",
+	fmt.Printf("%s│%s    %s4.%s 安装 AnyTLS + Reality (无需证书)                     %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s管理服务%s                                                 %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s6.%s 查看服务配置                                         %s│%s\n",
+	fmt.Printf("%s│%s    %s5.%s 查看服务配置                                         %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s7.%s 查看服务日志                                         %s│%s\n",
+	fmt.Printf("%s│%s    %s6.%s 查看服务日志                                         %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s8.%s 更新服务                                             %s│%s\n",
+	fmt.Printf("%s│%s    %s7.%s 更新服务                                             %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s9.%s 卸载服务                                             %s│%s\n",
+	fmt.Printf("%s│%s    %s8.%s 卸载服务                                             %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s证书管理%s                                                 %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s10.%s 续签证书 (Hysteria2/AnyTLS)                         %s│%s\n",
+	fmt.Printf("%s│%s    %s9.%s 续签证书 (Hysteria2/AnyTLS)                          %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s11.%s 查看证书状态                                        %s│%s\n",
+	fmt.Printf("%s│%s    %s10.%s 查看证书状态                                        %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %sReality SNI 工具%s                                         %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s14.%s Reality SNI 候选评估 (粘贴扫描结果一键挑最佳)        %s│%s\n",
+	fmt.Printf("%s│%s    %s13.%s Reality SNI 候选评估 (粘扫描结果一键挑最佳)         %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s订阅 / 内核管理%s                                          %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s15.%s 订阅服务管理 (启用 / 停用 / 查看 URL / 轮换 token)   %s│%s\n",
+	fmt.Printf("%s│%s    %s14.%s 订阅服务管理 (启用/停用/URL/轮换 token)              %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s16.%s 一键升级所有内核 (xray + sing-box + snell + ...)    %s│%s\n",
+	fmt.Printf("%s│%s    %s15.%s 一键升级所有内核 (xray + sing-box)                  %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s  %s系统管理%s                                                 %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorYellow, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s12.%s 更新 Proxy Manager                                  %s│%s\n",
+	fmt.Printf("%s│%s    %s11.%s 更新 Proxy Manager                                  %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
-	fmt.Printf("%s│%s    %s13.%s 完全卸载 Proxy Manager                              %s│%s\n",
+	fmt.Printf("%s│%s    %s12.%s 完全卸载 Proxy Manager                              %s│%s\n",
 		utils.ColorGreen, utils.ColorReset, utils.ColorCyan, utils.ColorReset, utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s├─────────────────────────────────────────────────────────────┤%s\n", utils.ColorGreen, utils.ColorReset)
 	fmt.Printf("%s│%s    %s0.%s 退出                                                 %s│%s\n",

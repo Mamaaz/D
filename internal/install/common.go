@@ -257,12 +257,14 @@ func RenewCertForService(serviceName, configPath, domainKey, keyPath, certPath s
 
 // IsSingboxShared 检查是否有其他服务还在使用 sing-box 二进制
 // excludeConfigs 为当前正在卸载的服务的配置路径，应排除在检查之外
+//
+// 注：v4.0.26 删 SS-2022+STLS / Snell+STLS 后，sing-box 仅供 Hysteria2 /
+// AnyTLS / AnyTLS+Reality 用；Reality 已切 xray，不在此列表里。
 func IsSingboxShared(excludeConfigs ...string) bool {
 	allConfigs := []string{
-		SingboxProxyConfigPath,
-		RealityProxyConfigPath,
 		Hysteria2ProxyConfigPath,
 		AnyTLSProxyConfigPath,
+		AnyTLSRealityProxyConfigPath,
 	}
 
 	excluded := make(map[string]bool)

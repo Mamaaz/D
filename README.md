@@ -12,11 +12,13 @@ bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.
 
 | 协议 | 内核 | 备注 |
 | --- | --- | --- |
-| Snell + Shadow-TLS | `snell-server` + `shadow-tls` | Surge 原生支持 |
-| SS-2022 + Shadow-TLS | `sing-box` | |
 | **VLESS Reality** | **`xray-core`** | XTLS 团队 Reality 实现 (v4.0.7+) |
 | Hysteria2 | `sing-box` | LE 自动签证 |
 | AnyTLS | `sing-box` | LE 自动签证 |
+| AnyTLS + Reality | `sing-box` | Reality TLS 层，无需证书 (v4.0.25+) |
+
+> v4.0.26 起删除 Snell+Shadow-TLS / SS-2022+Shadow-TLS：ShadowTLS v3 已被探测，
+> Surge 用 AnyTLS 直连、其他客户端用 XSurge 桥接到 Reality 即可覆盖原场景。
 
 每协议独立端口、独立 systemd unit、专属系统用户 + `CAP_NET_BIND_SERVICE`，
 `ProtectSystem=strict` 硬化。
@@ -27,14 +29,14 @@ bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.
 
 | # | 功能 |
 | --- | --- |
-| 1-5 | 安装协议（Snell / SS-2022 / Reality / Hysteria2 / AnyTLS） |
-| 6 | 查看服务配置（输出 Surge / Mihomo / QuantumultX 三种格式） |
-| 7-9 | 查看日志 / 更新某协议 / 卸载协议 |
-| 10-11 | 续签证书 / 查看证书状态 |
-| 14 | Reality SNI 候选评估（粘扫描结果一键挑最佳） |
-| **15** | **订阅服务管理（启用 / 停用 / 看 URL / 轮换 token）** |
-| **16** | **一键升级所有内核（xray + sing-box + snell + shadow-tls）** |
-| 12-13 | 升级 / 卸载 proxy-manager 本身 |
+| 1-4 | 安装协议（Reality / Hysteria2 / AnyTLS / AnyTLS+Reality） |
+| 5 | 查看服务配置（输出 Surge / Mihomo / QuantumultX 三种格式） |
+| 6-8 | 查看日志 / 更新某协议 / 卸载协议 |
+| 9-10 | 续签证书 / 查看证书状态 |
+| 13 | Reality SNI 候选评估（粘扫描结果一键挑最佳） |
+| **14** | **订阅服务管理（启用 / 停用 / 看 URL / 轮换 token）** |
+| **15** | **一键升级所有内核（xray + sing-box）** |
+| 11-12 | 升级 / 卸载 proxy-manager 本身 |
 
 ## 核心子命令（CLI）
 

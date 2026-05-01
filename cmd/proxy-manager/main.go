@@ -116,20 +116,17 @@ func showHelp() {
                              RealiTLScanner CSV 或 hostname list (stdin / args)
   proxy-manager edit         修改已安装协议的可变字段，无需 reinstall:
                              - reality: port/uuid/short-id/sni
-                             - snell: snell-port/snell-psk/shadowtls-{port,password}/tls-domain
-                             - ss2022: ss-port/ss-password/shadowtls-{port,password}/tls-domain
-  proxy-manager kernel       管理底层内核 (xray-core / sing-box / snell / shadow-tls)
+  proxy-manager kernel       管理底层内核 (xray-core / sing-box)
                              list (default) | upgrade [name|--all]
   proxy-manager service-rebuild
                              重建所有已安装协议的 systemd 单元
                              (升级二进制后用，让 unit 文件改动生效)
 
 支持的协议:
-  - Snell + Shadow-TLS
-  - SS-2022 + Shadow-TLS
   - VLESS Reality
   - Hysteria2
   - AnyTLS
+  - AnyTLS + Reality
 
 安装命令:
   bash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)
