@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -114,7 +116,27 @@ func saveLocked(s *Store) error {
 	if err := os.Rename(tmp, StorePath); err != nil {
 		return fmt.Errorf("rename store: %w", err)
 	}
+	// install 跑 root 写出 root-owned 的 nodes.json，但 subscribe service
+	// 跑 proxy-manager 用户读不到，会 500 "store unavailable"。这里 best-
+	// effort chown 让两边都能用。proxy-manager 用户不存在 (e.g. 还没装
+	// subscribe service) 时静默跳过——subscribe enable 时会自己创用户 +
+	// chown 一次。
+	chownToSubscribeUser()
 	return nil
+}
+
+func chownToSubscribeUser() {
+	u, err := user.Lookup("proxy-manager")
+	if err != nil {
+		return
+	}
+	uid, err1 := strconv.Atoi(u.Uid)
+	gid, err2 := strconv.Atoi(u.Gid)
+	if err1 != nil || err2 != nil {
+		return
+	}
+	_ = os.Chown(StorePath, uid, gid)
+	_ = os.Chown(StoreDir, uid, gid)
 }
 
 // Upsert inserts a node, replacing any existing node with the same ID.
