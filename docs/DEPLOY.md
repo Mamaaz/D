@@ -154,12 +154,61 @@ proxy-manager update
 
 `service-rebuild` 会：
 - 读 `nodes.json` 列出已装协议
-- 逐个重写 systemd unit（拿到 PR3 的 User= 降权）
+- 逐个重写 systemd unit（拿到 PR3 的 User= 降权 + v4.0.6 的 subscribe 服务降权）
 - daemon-reload + restart
 
 老部署只升级二进制不会自动改 unit；必须跑一次 `service-rebuild` 或 `update`。
 
-## 7. 卸载
+## 7. Reality SNI 候选评估（v4.0.5+）
+
+Reality 协议要选一个 TLS 1.3 + X25519 + h2 + 证书可信 的 SNI 目标做仿冒。
+完整流程：
+
+1. **本地扫描**（Mac/Linux）：用 RealiTLScanner 对一段 IP 发起 TLS 握手，
+   筛出 Reality 兼容的 host。**必须本地，VPS 扫会被云厂商风控当扫描器封机**。
+   ```bash
+   ./RealiTLScanner -addr 193.32.150.0/24 -thread 8 -timeout 5 -out scan.csv
+   ```
+2. **VPS 视角打分**：把 CSV 上传到 VPS，跑 sni-rank 并发探测 + 自动排序：
+   ```bash
+   cat scan.csv | proxy-manager sni-rank --top 10
+   ```
+   或在交互菜单选 #14「Reality SNI 候选评估」直接粘 CSV，看 ranked 表 +
+   一键应用推荐。
+3. **应用**：
+   ```bash
+   proxy-manager edit reality --field sni --value <推荐 host>
+   ```
+
+打分规则透明：TLS<1.3 / 证书无效直接淘汰；HTTP 200 加分；CDN (cloudflare/
+akamai/...) 减 300 分；隐版本 nginx 加分；TLS RTT 直接当负分。
+
+> ⚠️ Surge / Clash 增强模式用户：扫描器和 openssl 都会被 fake DNS 拦截，
+> 必须在代理配置 [Rule] 顶部加 `PROCESS-NAME,RealiTLScanner,DIRECT` +
+> `PROCESS-NAME,openssl,DIRECT`，否则结果会被反代后端污染。
+
+## 8. 修改协议配置（无需 reinstall，v4.0.3+）
+
+```bash
+proxy-manager edit                           # 全交互
+proxy-manager edit reality --field sni --value www.apple.com
+proxy-manager edit snell --field shadowtls-password --value <new>
+proxy-manager edit ss2022 --field tls-domain --value <new>
+```
+
+支持的字段：
+
+| 协议 | 可改字段 |
+| --- | --- |
+| reality | port / uuid / short-id / sni |
+| snell | snell-port / snell-psk / shadowtls-port / shadowtls-password / tls-domain |
+| ss2022 | ss-port / ss-password / shadowtls-port / shadowtls-password / tls-domain |
+| Hysteria2 / AnyTLS | (暂不支持，涉及 ACME 重签——请用 install 重装) |
+
+故意不暴露的字段：Reality 的 private/public key、SS-2022 的 encrypt method
+——改了等于 invalidate 所有客户端，重装表达更清楚。
+
+## 9. 卸载
 
 ```bash
 proxy-manager --action uninstall_service       # 卸某个协议（交互选）
@@ -235,10 +284,12 @@ journalctl -u sing-box-reality -n 30
 
 ### 升级后老协议 unit User=root 没改
 
-PR3 把 sing-box / snell 等服务的 `User=` 从 root 降到协议用户。如果是从 PR3 之前的版本升上来，unit 文件不会自动改写（早期 install 已写过文件，update 只换二进制）。
+PR3 把 sing-box / snell 等服务的 `User=` 从 root 降到协议用户；v4.0.6 把
+subscribe 服务也降到 `User=proxy-manager` (CAP_NET_BIND_SERVICE bind :80)。
+旧 unit 文件不会自动改写（早期 install 已写过文件，update 只换二进制）。
 
 ```bash
-proxy-manager service-rebuild   # 强制重写所有协议 unit + restart
+proxy-manager service-rebuild   # 强制重写所有协议 + subscribe unit + restart
 ```
 
 ## 已知限制
@@ -246,6 +297,8 @@ proxy-manager service-rebuild   # 强制重写所有协议 unit + restart
 | 限制 | 影响 | 改进方向 |
 | --- | --- | --- |
 | ~~没有 GitHub Releases~~ | ~~install.sh 在线安装当前不可用~~ | ✅ 已修：`.github/workflows/release.yml` |
+| ~~subscribe 服务跑 root~~ | ~~权限过大~~ | ✅ v4.0.6 改 `User=proxy-manager` + `CAP_NET_BIND_SERVICE` |
 | acme.sh vs autocert 抢 :80 | 必须按"先协议后订阅"顺序装 | 后续可改 webroot 方式共享 :80 |
 | systemd unit 落 `/lib/systemd/system/` | 非惯例（应在 `/etc/`），但工作正常 | 一行常量改动，低优先级 |
+| Hysteria2/AnyTLS 不支持 edit | 改这俩协议得重装 | ACME 重签复杂，等真有需求再加 |
 | 单机部署，无 HA / 集群 | 单点故障 | 当前 scope 不需要 |
