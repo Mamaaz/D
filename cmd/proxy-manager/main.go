@@ -36,6 +36,9 @@ func main() {
 		case "sni-test":
 			runSNITest(os.Args[2:])
 			return
+		case "sni-rank":
+			runSNIRank(os.Args[2:])
+			return
 		case "edit":
 			runEdit(os.Args[2:])
 			return
@@ -103,6 +106,9 @@ func showHelp() {
   proxy-manager doctor       一键诊断: 协议服务/证书/订阅服务状态
   proxy-manager sni-test <host>
                              从 VPS 视角验证候选 Reality SNI: TLS1.3/X25519/h2/证书
+  proxy-manager sni-rank [--in scan.csv] [--top N] [host ...]
+                             批量探测 + 自动打分排序 + 推荐最佳；接受
+                             RealiTLScanner CSV 或 hostname list (stdin / args)
   proxy-manager edit         修改已安装协议的可变字段 (MVP: VLESS Reality 的
                              port / uuid / short-id / sni)
   proxy-manager service-rebuild
