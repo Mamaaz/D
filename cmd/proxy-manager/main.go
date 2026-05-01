@@ -42,6 +42,9 @@ func main() {
 		case "edit":
 			runEdit(os.Args[2:])
 			return
+		case "kernel":
+			runKernel(os.Args[2:])
+			return
 		case "service-rebuild":
 			checkRoot()
 			runServiceRebuild(os.Args[2:])
@@ -113,6 +116,8 @@ func showHelp() {
                              - reality: port/uuid/short-id/sni
                              - snell: snell-port/snell-psk/shadowtls-{port,password}/tls-domain
                              - ss2022: ss-port/ss-password/shadowtls-{port,password}/tls-domain
+  proxy-manager kernel       管理底层内核 (xray-core / sing-box / snell / shadow-tls)
+                             list (default) | upgrade [name|--all]
   proxy-manager service-rebuild
                              重建所有已安装协议的 systemd 单元
                              (升级二进制后用，让 unit 文件改动生效)
