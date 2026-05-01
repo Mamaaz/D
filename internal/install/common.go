@@ -1,6 +1,7 @@
 package install
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -29,9 +30,9 @@ const (
 // 通用证书管理
 // =========================================
 
-// PrintAdditionalFormatsForType 给查看配置流程在 Surge 行之下追加 QuantumultX
-// 行 (将来可加 Mihomo / Clash 等)。从 store.Load() 找到对应类型的节点，
-// 调 format.ToQX。失败静默——查看流程不应被多余格式打断。
+// PrintAdditionalFormatsForType 给查看配置流程在 Surge 行之下追加 Mihomo +
+// QuantumultX 两段（Mihomo 是 Clash.Meta 接班，accept 标准 Clash YAML；QX
+// iOS 主流）。失败静默。
 func PrintAdditionalFormatsForType(t store.NodeType) {
 	s, err := store.Load()
 	if err != nil || s == nil {
@@ -46,6 +47,14 @@ func PrintAdditionalFormatsForType(t store.NodeType) {
 	}
 	if node == nil {
 		return
+	}
+	if entry, err := format.ToClash(node); err == nil {
+		// Clash/Mihomo 用 JSON 一行输出，方便用户直接粘到 proxies: 数组里
+		if data, err := json.Marshal(entry); err == nil {
+			fmt.Printf("%sMihomo / Clash.Meta:%s\n%s%s%s\n\n",
+				utils.ColorCyan, utils.ColorReset,
+				utils.ColorGreen, string(data), utils.ColorReset)
+		}
 	}
 	if qx, err := format.ToQX(node); err == nil && qx != "" {
 		fmt.Printf("%sQuantumultX:%s\n%s%s%s\n\n",
