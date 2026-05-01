@@ -75,13 +75,10 @@ func printSubscribeURLs() {
 		}
 	}
 	fmt.Println()
-	fmt.Printf("%sXSurge (Mac 状态栏 app)%s 直接添加 json URL 即可。\n",
+	fmt.Printf("%sXSurge (Mac 状态栏 app)%s 直接复制上面 json URL 添加订阅即可。\n",
 		utils.ColorGreen, utils.ColorReset)
-	if json, ok := urls["json"]; ok {
-		fmt.Println()
-		fmt.Println("  扫码导入 (json):")
-		printQR(json)
-	}
+	// 不再打 json 订阅 URL 的 QR — XSurge 用复制粘贴 URL 字符串，QR 没用；
+	// 上面 printNodeShareURL 给的 vless:// 单节点 share 才是手机扫码场景。
 }
 
 // printQR 跟 cmd/proxy-manager/subscribe.go 同款；ui 包独立 import qrterminal
