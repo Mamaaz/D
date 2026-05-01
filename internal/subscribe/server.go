@@ -7,8 +7,12 @@
 //	GET /healthz                (200 OK, no auth — for monitoring)
 //
 // Authentication is a single token in the URL path, compared in constant time.
-// Rotating the token via `proxy-manager subscribe rotate-token` invalidates
-// every previously distributed URL in one shot.
+// Rotating the token via `proxy-manager subscribe rotate-token` issues a new
+// token; the old token stays valid for store.PreviousTokenGracePeriod (7 days)
+// so clients have a window to update without going dark mid-rotation.
+//
+// Per-IP rate limiting + ban-on-repeated-401 in ratelimit.go gives defense in
+// depth against token brute force / leaked-token abuse.
 package subscribe
 
 import (
@@ -20,10 +24,15 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Mamaaz/proxy-manager/internal/format"
 	"github.com/Mamaaz/proxy-manager/internal/store"
 )
+
+// rl 是 process-级 rate limiter。serveSubscribe / token 校验失败 都通过它
+// 共享 ban 状态。Handler 创建,所以每次 daemon 重启清零 (单 binary 自用够)。
+var rl = newLimiter()
 
 // Handler returns the http.Handler that serves all subscription routes.
 // It re-loads the store on every request so new installs/uninstalls take
@@ -38,7 +47,7 @@ func Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
-	return logMiddleware(mux)
+	return logMiddleware(rateLimitMiddleware(rl, mux))
 }
 
 func serveSubscribe(w http.ResponseWriter, r *http.Request) {
@@ -58,10 +67,13 @@ func serveSubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "store unavailable", http.StatusInternalServerError)
 		return
 	}
-	if !validToken(s.Subscribe.Token, token) {
+	ip := clientIP(r)
+	if !acceptToken(s.Subscribe, token, time.Now()) {
+		rl.recordUnauth(ip, time.Now())
 		http.NotFound(w, r) // 404 not 401 to avoid revealing token presence
 		return
 	}
+	rl.recordAuth(ip)
 
 	// Stable order so identical store state always renders identical output.
 	sort.SliceStable(s.Nodes, func(i, j int) bool { return s.Nodes[i].ID < s.Nodes[j].ID })
@@ -69,6 +81,18 @@ func serveSubscribe(w http.ResponseWriter, r *http.Request) {
 	if err := writeFormat(w, formatName, s); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
+}
+
+// acceptToken 接受当前 token,或者 rotate 之后还在宽限期里的旧 token。
+// rotate 后给客户端 7 天时间重新拿 URL,避免一刀切断订阅。
+func acceptToken(cfg store.SubscribeConfig, supplied string, now time.Time) bool {
+	if validToken(cfg.Token, supplied) {
+		return true
+	}
+	if cfg.PreviousToken != "" && now.Before(cfg.PreviousTokenExpiresAt) {
+		return validToken(cfg.PreviousToken, supplied)
+	}
+	return false
 }
 
 // validToken returns true iff configured and supplied tokens match in

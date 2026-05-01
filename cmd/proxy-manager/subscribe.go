@@ -157,7 +157,8 @@ func runSubscribeRotate() {
 		os.Exit(1)
 	}
 	fmt.Printf("新 token: %s...%s\n", token[:4], token[len(token)-4:])
-	fmt.Println("所有旧的订阅 URL 已立即失效")
+	graceDays := int(store.PreviousTokenGracePeriod.Hours()) / 24
+	fmt.Printf("旧 URL 仍可用 %d 天 (grace period),之后才彻底失效 — 期间请把客户端订阅改成新 URL\n", graceDays)
 	s, _ := store.Load()
 	if urls := subscribe.Urls(s); urls != nil {
 		fmt.Println()
