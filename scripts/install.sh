@@ -378,6 +378,15 @@ do_update() {
     if download_binary "$latest_version"; then
         rm -f "${INSTALL_DIR}/${BINARY_NAME}.bak"
         log_success "更新成功: v${current_version} -> v${latest_version}"
+
+        # Re-render systemd units so changes between versions (User=, caps,
+        # ExecStart=) take effect on already-running services. Idempotent;
+        # silently skips protocols not currently installed. Failures here
+        # don't bubble up — the binary upgrade itself succeeded, services
+        # can be rebuilt manually if this step had issues.
+        log_info "重建已安装协议的 systemd 单元..."
+        "${INSTALL_DIR}/${BINARY_NAME}" service-rebuild || \
+            log_warn "service-rebuild 部分失败，可手动运行 proxy-manager service-rebuild 重试"
     else
         # 回滚
         mv "${INSTALL_DIR}/${BINARY_NAME}.bak" "${INSTALL_DIR}/${BINARY_NAME}" 2>/dev/null || true
