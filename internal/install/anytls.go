@@ -238,9 +238,10 @@ func selectPaddingScheme() string {
 	}
 }
 
-// installAcmeAndCert 安装 acme.sh 并申请证书 (委托通用函数)
+// installAcmeAndCert 安装 acme.sh 并申请证书 (委托通用函数)。
+// 用 PromptChallengeMode 让用户选 HTTP-01 / DNS-01-CF。
 func installAcmeAndCert(domain string) error {
-	return InstallAcme(domain)
+	return InstallAcme(domain, PromptChallengeMode())
 }
 
 // installCertToAnyTLS 安装证书到 AnyTLS 目录 (委托通用函数)
