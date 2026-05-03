@@ -196,8 +196,8 @@ func saveAnyTLSRealityConfig(cfg AnyTLSRealityConfig) {
 
 func storeNodeFromAnyTLSReality(cfg AnyTLSRealityConfig) store.Node {
 	return store.Node{
-		ID:     "anytls-reality",
-		Name:   "AnyTLS-Reality",
+		ID:     fmt.Sprintf("anytls-reality-%s", cfg.ServerIP),
+		Name:   fmt.Sprintf("AnyTLS-Reality@%s", cfg.ServerIP),
 		Type:   store.TypeAnyTLSReality,
 		Server: cfg.ServerIP,
 		Port:   cfg.Port,

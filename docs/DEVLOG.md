@@ -203,6 +203,19 @@ Mac (XSurge)：
 
 实战回来加的"血泪条目"，写下来防同样的坑再被踩。
 
+### node.ID 全 VPS 共享 → 多订阅 nodeOverrides 串台（v4.0.33 修）
+
+**症状**：用户在 XSurge 添加 3 个订阅（DMIT-LAX / DMIT-Lax2 / BWG-LAX），桥接节点列表 3 项分别用不同端口（17890/17891/17892）正确生成,但显示名都成 "BWG-LAX"。改其中一个节点的名字会同时改另外两个。
+
+**根因**：`internal/install/storebridge.go` 给每个协议写死静态 ID/Name：`"vless-reality"` / `"VLESS-Reality"`。多 VPS 装同协议时所有节点 ID 撞 key,XSurge `nodeOverrides[node.id]` 是单 String key 的 dict,一个改名串台到全部。
+
+**修复**：
+- `storeNodeFromReality` 等 4 个 helper 写出来的 ID/Name 后缀 `-<ServerIP>` / `@<ServerIP>`
+- `legacyToNode` (.txt 迁移) 同步走新格式
+- `internal/store/migrate.go rewriteStaticIDs` 在 `loadLocked` in-memory 把老 nodes.json 的静态 ID 改写到唯一形式（幂等,不写盘,subscribe 服务返出去的 JSON 立刻拿到唯一 ID,用户不必重装协议）
+
+**配套**：XSurge 同步把 `nodeOverrides` 改成 `(subID, nodeID)` 复合 key（v0.x.x 标签待出）。即便服务端没升,客户端也能区分多订阅同 ID 节点。
+
 ### shortid 必须严格 hex（v4.0.31 修）
 
 **症状**：QX 加 VLESS Reality 节点报 "syntax error"，但同一份订阅里另一个节点能用。差别只在 `reality-hex-shortid` 字段：能用的全 0-9/a-f，报错的有 X/m/U 等大小写字母。

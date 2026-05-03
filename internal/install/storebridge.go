@@ -1,6 +1,8 @@
 package install
 
 import (
+	"fmt"
+
 	"github.com/Mamaaz/proxy-manager/internal/store"
 	"github.com/Mamaaz/proxy-manager/internal/utils"
 )
@@ -9,6 +11,11 @@ import (
 // store.Node format. Install/uninstall functions call these helpers in
 // addition to the legacy .txt save/delete; the .txt files remain the
 // runtime source of truth for now and are removed in a later PR.
+//
+// v4.0.33: ID 和 Name 都按 ServerIP 后缀唯一化。之前所有 VPS 的 Reality
+// 节点都用静态 "vless-reality" / "VLESS-Reality",XSurge 合并多个订阅时
+// node.id 撞 key,nodeOverrides 共享一个槽,改名串台。store/migrate.go
+// rewriteStaticIDs 给老 nodes.json 在 load 时做 in-memory 迁移。
 
 func upsertNode(n store.Node) {
 	if err := store.Upsert(n); err != nil {
@@ -24,8 +31,8 @@ func removeNodeByType(t store.NodeType) {
 
 func storeNodeFromReality(cfg RealityConfig) store.Node {
 	return store.Node{
-		ID:     "vless-reality",
-		Name:   "VLESS-Reality",
+		ID:     fmt.Sprintf("vless-reality-%s", cfg.ServerIP),
+		Name:   fmt.Sprintf("VLESS-Reality@%s", cfg.ServerIP),
 		Type:   store.TypeVLESSReality,
 		Server: cfg.ServerIP,
 		Port:   cfg.Port,
@@ -50,8 +57,8 @@ func storeNodeFromHysteria2(cfg Hysteria2Config) store.Node {
 		params["obfs_password"] = cfg.ObfsPassword
 	}
 	return store.Node{
-		ID:     "hysteria2",
-		Name:   "Hysteria2",
+		ID:     fmt.Sprintf("hysteria2-%s", cfg.ServerIP),
+		Name:   fmt.Sprintf("Hysteria2@%s", cfg.ServerIP),
 		Type:   store.TypeHysteria2,
 		Server: cfg.ServerIP,
 		Port:   cfg.Port,
@@ -61,8 +68,8 @@ func storeNodeFromHysteria2(cfg Hysteria2Config) store.Node {
 
 func storeNodeFromAnyTLS(cfg AnyTLSConfig) store.Node {
 	return store.Node{
-		ID:     "anytls",
-		Name:   "AnyTLS",
+		ID:     fmt.Sprintf("anytls-%s", cfg.ServerIP),
+		Name:   fmt.Sprintf("AnyTLS@%s", cfg.ServerIP),
 		Type:   store.TypeAnyTLS,
 		Server: cfg.ServerIP,
 		Port:   cfg.Port,

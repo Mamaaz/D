@@ -70,13 +70,14 @@ func readLegacyTxt(path string) (map[string]string, error) {
 }
 
 func legacyToNode(kv map[string]string) (Node, bool) {
+	ip := kv["SERVER_IP"]
 	switch kv["TYPE"] {
 	case "reality":
 		return Node{
-			ID:     "vless-reality",
-			Name:   "VLESS-Reality",
+			ID:     fmt.Sprintf("vless-reality-%s", ip),
+			Name:   fmt.Sprintf("VLESS-Reality@%s", ip),
 			Type:   TypeVLESSReality,
-			Server: kv["SERVER_IP"],
+			Server: ip,
 			Port:   atoi(kv["PORT"]),
 			Params: map[string]any{
 				"uuid":        kv["UUID"],
@@ -97,19 +98,19 @@ func legacyToNode(kv map[string]string) (Node, bool) {
 			params["obfs_password"] = v
 		}
 		return Node{
-			ID:     "hysteria2",
-			Name:   "Hysteria2",
+			ID:     fmt.Sprintf("hysteria2-%s", ip),
+			Name:   fmt.Sprintf("Hysteria2@%s", ip),
 			Type:   TypeHysteria2,
-			Server: kv["SERVER_IP"],
+			Server: ip,
 			Port:   atoi(kv["HYSTERIA2_PORT"]),
 			Params: params,
 		}, true
 	case "anytls":
 		return Node{
-			ID:     "anytls",
-			Name:   "AnyTLS",
+			ID:     fmt.Sprintf("anytls-%s", ip),
+			Name:   fmt.Sprintf("AnyTLS@%s", ip),
 			Type:   TypeAnyTLS,
-			Server: kv["SERVER_IP"],
+			Server: ip,
 			Port:   atoi(kv["ANYTLS_PORT"]),
 			Params: map[string]any{
 				"password":     kv["ANYTLS_PASSWORD"],
@@ -119,6 +120,47 @@ func legacyToNode(kv map[string]string) (Node, bool) {
 		}, true
 	}
 	return Node{}, false
+}
+
+// rewriteStaticIDs 把 v4.0.32 之前用的"全 VPS 共享"的静态 ID/Name 改写成
+// 按 ServerIP 唯一化的形式。XSurge 合并多个订阅的节点时按 node.id 索引
+// nodeOverrides;静态 ID 撞 key 导致重命名串台 (一个订阅改名,所有订阅
+// 跟着变),v4.0.33 起服务端写出来的 ID 就是唯一的,这里 in-memory 给老
+// nodes.json 也做同样处理,subscribe 服务返给客户端的 JSON 立刻拿到
+// 唯一 ID,不必等用户重装协议。
+//
+// 幂等:已经唯一化的 ID 不再处理 (前缀匹配 + "-" 后还有内容才算静态)。
+// 不写盘:loadLocked 是只读路径,subscribe 用非 root 用户跑没写权;下次
+// install/edit 走 saveLocked 时自然落盘。
+func rewriteStaticIDs(s *Store) {
+	for i := range s.Nodes {
+		n := &s.Nodes[i]
+		if n.Server == "" {
+			continue
+		}
+		switch n.ID {
+		case "vless-reality":
+			n.ID = fmt.Sprintf("vless-reality-%s", n.Server)
+			if n.Name == "VLESS-Reality" || n.Name == "Reality" {
+				n.Name = fmt.Sprintf("VLESS-Reality@%s", n.Server)
+			}
+		case "hysteria2":
+			n.ID = fmt.Sprintf("hysteria2-%s", n.Server)
+			if n.Name == "Hysteria2" {
+				n.Name = fmt.Sprintf("Hysteria2@%s", n.Server)
+			}
+		case "anytls":
+			n.ID = fmt.Sprintf("anytls-%s", n.Server)
+			if n.Name == "AnyTLS" {
+				n.Name = fmt.Sprintf("AnyTLS@%s", n.Server)
+			}
+		case "anytls-reality":
+			n.ID = fmt.Sprintf("anytls-reality-%s", n.Server)
+			if n.Name == "AnyTLS-Reality" {
+				n.Name = fmt.Sprintf("AnyTLS-Reality@%s", n.Server)
+			}
+		}
+	}
 }
 
 func atoi(s string) int {
