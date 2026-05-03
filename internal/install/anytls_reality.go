@@ -224,3 +224,35 @@ func UninstallAnyTLSReality() error {
 func IsAnyTLSRealityInstalled() bool {
 	return utils.FileExists(AnyTLSRealityProxyConfigPath)
 }
+
+// ViewAnyTLSRealityConfig 查看 AnyTLS+Reality 配置。Surge 不支持这个组合，
+// 所以只打印基础参数 + 委托 PrintAdditionalFormatsForType 输出 sing-box /
+// mihomo / QX 行。
+func ViewAnyTLSRealityConfig() {
+	if !utils.FileExists(AnyTLSRealityProxyConfigPath) {
+		utils.PrintError("AnyTLS + Reality 未安装")
+		return
+	}
+
+	config, err := ParseConfigFile(AnyTLSRealityProxyConfigPath)
+	if err != nil {
+		utils.PrintError("读取配置失败: %v", err)
+		return
+	}
+
+	fmt.Println()
+	fmt.Printf("%s=========================================%s\n", utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s   AnyTLS + Reality 配置 (sing-box 内核)%s\n", utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s=========================================%s\n", utils.ColorGreen, utils.ColorReset)
+	fmt.Printf("%s服务器 IP:%s %s\n", utils.ColorCyan, utils.ColorReset, config["SERVER_IP"])
+	fmt.Printf("%s端口:%s %s\n", utils.ColorCyan, utils.ColorReset, config["PORT"])
+	fmt.Printf("%s密码:%s %s\n", utils.ColorCyan, utils.ColorReset, config["PASSWORD"])
+	fmt.Printf("%sSNI 目标:%s %s\n", utils.ColorCyan, utils.ColorReset, config["SERVER_NAME"])
+	fmt.Printf("%sPublicKey:%s %s\n", utils.ColorCyan, utils.ColorReset, config["PUBLIC_KEY"])
+	fmt.Printf("%sShortID:%s %s\n", utils.ColorCyan, utils.ColorReset, config["SHORT_ID"])
+	fmt.Printf("%sSing-box 版本:%s %s\n", utils.ColorCyan, utils.ColorReset, config["SINGBOX_VERSION"])
+	fmt.Println()
+	fmt.Printf("%s注:%s Surge 暂不支持 AnyTLS+Reality，请用 sing-box / mihomo / QuantumultX 客户端。\n", utils.ColorYellow, utils.ColorReset)
+	fmt.Println()
+	PrintAdditionalFormatsForType(store.TypeAnyTLSReality)
+}
