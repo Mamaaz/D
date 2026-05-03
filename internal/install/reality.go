@@ -2,6 +2,7 @@ package install
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -29,7 +30,7 @@ const (
 	RealityProxyConfigPath = "/etc/reality-proxy-config.txt"
 
 	// 旧路径，用于迁移检测
-	LegacyRealityConfigDir  = "/etc/sing-box-reality"
+	LegacyRealityConfigDir   = "/etc/sing-box-reality"
 	LegacyRealityServiceUnit = "/lib/systemd/system/sing-box-reality.service"
 
 	RealityServiceName = "xray-reality"
@@ -258,13 +259,25 @@ func generateRealityKeyPair() (string, string) {
 	return privateKey, publicKey
 }
 
+// generateShortID 出 16-char (8-byte) 全 hex 串。Reality short_id 在 sing-box
+// / xray 内核里都是按 hex 解析；QX 客户端的 reality-hex-shortid 字段更是
+// 严格 hex 校验（出现 g-z 直接判语法错误,节点不可用)。
+//
+// 历史 bug (修于 v4.0.31): 这里以前 shell 出 sing-box `generate rand --hex 8`,
+// 失败时 fallback 到 utils.GeneratePassword(8) — 后者用 base64 字母表
+// (A-Z/a-z/0-9/+),非 hex。装 VLESS Reality 时机器上若没 sing-box (常见,因
+// VLESS Reality 走 xray 内核),fallback 直接生效,store 里就被写进非 hex
+// shortid。xray 服务端宽松能跑,但 QX 加节点直接 syntax error。
+//
+// 改成 crypto/rand + hex.EncodeToString,无外部依赖,无 fallback 路径。
 func generateShortID() string {
-	cmd := exec.Command(SingboxBinaryPath, "generate", "rand", "--hex", "8")
-	output, err := cmd.Output()
-	if err != nil {
-		return utils.GeneratePassword(8)
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand 在 Linux 上 io.ReadFull(/dev/urandom) 实质不会失败;
+		// 真失败时整个程序也没法继续,fail loud 比静默生成弱随机串好。
+		panic("crypto/rand unavailable: " + err.Error())
 	}
-	return strings.TrimSpace(string(output))
+	return hex.EncodeToString(b[:])
 }
 
 // createRealityConfig 写 xray-core 风格的 Reality JSON。字段名跟 sing-box
@@ -298,12 +311,12 @@ func createRealityConfig(cfg RealityConfig) error {
 					"network":  "tcp",
 					"security": "reality",
 					"realitySettings": map[string]interface{}{
-						"show":         false,
-						"dest":         fmt.Sprintf("%s:443", cfg.ServerName),
-						"xver":         0,
-						"serverNames":  []string{cfg.ServerName},
-						"privateKey":   cfg.PrivateKey,
-						"shortIds":     []string{cfg.ShortID},
+						"show":        false,
+						"dest":        fmt.Sprintf("%s:443", cfg.ServerName),
+						"xver":        0,
+						"serverNames": []string{cfg.ServerName},
+						"privateKey":  cfg.PrivateKey,
+						"shortIds":    []string{cfg.ShortID},
 					},
 				},
 				"sniffing": map[string]interface{}{
