@@ -289,6 +289,7 @@ func doViewConfig() {
 		"VLESS Reality",
 		"Hysteria2",
 		"AnyTLS",
+		"AnyTLS + Reality",
 		"返回",
 	}
 
@@ -300,6 +301,8 @@ func doViewConfig() {
 		install.ViewHysteria2Config()
 	case 3:
 		install.ViewAnyTLSConfig()
+	case 4:
+		install.ViewAnyTLSRealityConfig()
 	}
 	waitForEnter()
 }
