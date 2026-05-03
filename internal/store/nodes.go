@@ -99,6 +99,7 @@ func loadLocked() (*Store, error) {
 	if s.Version == 0 {
 		s.Version = StoreVersion
 	}
+	rewriteStaticIDs(&s)
 	return &s, nil
 }
 
