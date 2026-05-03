@@ -465,12 +465,24 @@ func doViewCert() {
 func doUpdatePM() {
 	utils.PrintInfo("正在更新 Proxy Manager...")
 
-	installURL := "https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager_go/scripts/install.sh"
-	cmd := exec.Command("bash", "-c", fmt.Sprintf("curl -sL '%s' | bash -s update", installURL))
+	// 委托给本进程的 `proxy-manager update` 子命令（cmd/proxy-manager/main.go
+	// doUpdate）。两条路径以前各写一份 `curl ... | bash -s update`，导致
+	// v4.0.28 PR #41 只修了 CLI 那条，菜单这条还卡 stdin EOF。更早还混了
+	// 错的 monorepo 旧 URL (P/proxy_manager_go/scripts/install.sh) 直接 404，
+	// 把 GitHub 的 "404: Not Found" 响应体喂给 bash → "bash: line 1: 404::
+	// command not found"。统一用 os.Executable() 自调，规避两个坑。
+	self, err := os.Executable()
+	if err != nil {
+		utils.PrintError("定位自身二进制失败: %v", err)
+		return
+	}
+	cmd := exec.Command(self, "update")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		utils.PrintError("更新失败: %v", err)
+	}
 }
 
 func doUninstallPM() {
@@ -504,7 +516,7 @@ func doUninstallPM() {
 	utils.PrintSuccess("Proxy Manager 已卸载")
 	fmt.Println()
 	fmt.Printf("%s重新安装:%s\n", utils.ColorCyan, utils.ColorReset)
-	fmt.Printf("%sbash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/P/proxy_manager_go/scripts/install.sh)%s\n", utils.ColorYellow, utils.ColorReset)
+	fmt.Printf("%sbash <(curl -sL https://raw.githubusercontent.com/Mamaaz/D/main/scripts/install.sh)%s\n", utils.ColorYellow, utils.ColorReset)
 	fmt.Println()
 
 	os.Exit(0)
