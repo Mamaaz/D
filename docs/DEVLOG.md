@@ -199,6 +199,36 @@ Mac (XSurge)：
 
 ---
 
+## 踩坑记录
+
+实战回来加的"血泪条目"，写下来防同样的坑再被踩。
+
+### shortid 必须严格 hex（v4.0.31 修）
+
+**症状**：QX 加 VLESS Reality 节点报 "syntax error"，但同一份订阅里另一个节点能用。差别只在 `reality-hex-shortid` 字段：能用的全 0-9/a-f，报错的有 X/m/U 等大小写字母。
+
+**根因**：`internal/install/reality.go generateShortID()` 主路径 `singbox generate rand --hex 8`，**fallback 走 `utils.GeneratePassword(8)` 而后者是 base64 字母表（含 A-Z/a-z/0-9/+）**，根本不是 hex。装 VLESS Reality 的机器很多没 sing-box（VLESS Reality 走 xray 内核，sing-box 不是必装依赖），fallback 直接命中，store 里写进的就是非 hex 串。
+
+**为啥 xray server 还能起**：xray 解析 shortid 比较宽松，按字面字节读，自洽就行。但 QX 字段名叫 `reality-hex-shortid`，前缀 hex 是合约，校验失败直接拒。Surge 的 `short-id=` 同理理论上也该报错，实测看版本宽松度不一。
+
+**修复**：直接 `crypto/rand` 读 8 字节 + `hex.EncodeToString`，无外部进程依赖，无 fallback 路径。
+
+**对存量节点的影响**：v4.0.31 之前装出来、shortid 含非 hex 的节点继续在 nodes.json 里，xray 服务端能跑但 QX 不认。修了之后 `proxy-manager` 卸载 → 重装 VLESS Reality 即可生成正确 shortid。客户端订阅重导。
+
+### 菜单"更新 Proxy Manager"（11/12）双层 bug（v4.0.30 修）
+
+**症状**：v4.0.28 已合 PR #41 修 `proxy-manager update` 的 stdin EOF bug，但用户从 TUI 菜单触发更新仍报 `bash: line 1: 404:: command not found`。
+
+**根因双层**：
+1. `internal/ui/ui.go doUpdatePM()` 的 install.sh URL 写的是 monorepo 旧路径 `main/P/proxy_manager_go/scripts/install.sh`，早就 404。GitHub raw 直接返响应体 `404: Not Found`，被 `curl -sL` 透传 piped 进 `bash -s update`，bash 把第一行 `404:` 当命令名 → "command not found"。`-s` 只压进度，不压响应体。
+2. PR #41 只修了 `cmd/proxy-manager/main.go` 的 `doUpdate()`，菜单是另一份独立逻辑（`doUpdatePM`），用 `curl ... | bash -s update` 老路径，stdin EOF bug 也没复用修复。
+
+**修复**：`doUpdatePM` 改成 `os.Executable()` 自调 `<self> update`，菜单和 CLI 共用 cmd/main 的 `doUpdate`（download to tmpfile + 保留 stdin）。
+
+**通用教训**：重复逻辑不只是审美问题，是单点修复扩散不到所有调用方的根源。fix bug 时 grep 一下相同 pattern。
+
+---
+
 ## 已知限制 / 未来可做
 
 不是"待办"，是"想清楚了不做或低优先级"：
