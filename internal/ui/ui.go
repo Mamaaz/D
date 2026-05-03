@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/Mamaaz/proxy-manager/internal/install"
 	"github.com/Mamaaz/proxy-manager/internal/services"
@@ -482,6 +483,24 @@ func doUpdatePM() {
 	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
 		utils.PrintError("更新失败: %v", err)
+		return
+	}
+
+	// 升级成功:disk 上 binary 已是新版,但本进程 (TUI menu loop) 还是更新前
+	// fork 出来的旧进程,version.Version 已编进二进制 / generateShortID 等
+	// 函数指针都指向旧实现。如果用户接着在同一个菜单 session 里重装协议
+	// (v4.0.31 修 generateShortID 后用户碰到的真实场景),走的还是旧逻辑,
+	// 又会复现刚才修掉的 bug,但用户感知不到 — 标题甚至都还显示旧版本。
+	//
+	// syscall.Exec 把当前 PID 替换成 disk 上的新 binary,菜单立刻按新代码
+	// 重启:版本号、bug 修复、新协议入口都生效。binPath 用 install.sh 的
+	// 固定 INSTALL_DIR 路径,install.sh 跑 service-rebuild 已经验证过新
+	// binary 可执行。
+	binPath := "/usr/local/bin/proxy-manager"
+	utils.PrintInfo("加载新版本 ...")
+	if err := syscall.Exec(binPath, []string{binPath}, os.Environ()); err != nil {
+		utils.PrintWarn("自动重启失败: %v;请手动 exit 后重新运行 proxy-manager", err)
+		os.Exit(0)
 	}
 }
 
