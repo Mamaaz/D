@@ -215,6 +215,16 @@ Mac (XSurge)：
 
 **对存量节点的影响**：v4.0.31 之前装出来、shortid 含非 hex 的节点继续在 nodes.json 里，xray 服务端能跑但 QX 不认。修了之后 `proxy-manager` 卸载 → 重装 VLESS Reality 即可生成正确 shortid。客户端订阅重导。
 
+### 升级后 in-memory 旧代码继续跑（v4.0.32 修）
+
+**症状**：v4.0.31 已合 generateShortID hex 修复，用户跑 `proxy-manager update` 显示 `v4.0.30 -> v4.0.31` 升级成功，紧接着在**同一个 menu session** 里走 8 → 1 卸载 + 主菜单 1 重装 VLESS Reality，新生成的 shortid 仍是非 hex（`utBItM1P` 8 字符）。`/usr/local/bin/proxy-manager --version` 报 v4.0.31，但菜单 banner 还是 v4.0.30。
+
+**根因**：`doUpdatePM` 自调子进程跑 install.sh 替换 disk 上的 binary，但**当前 TUI 进程仍是更新前 fork 的旧 binary**——`version.Version` 是编译期 ldflags 注入的常量，`generateShortID` 等函数地址也指向旧 .text 段。子进程退出后控制权回到旧进程的菜单 loop，标题和所有后续操作走旧代码。用户感知不到，重装协议命中早就修掉的 bug。
+
+**修复**：`doUpdatePM` 子进程返回成功后 `syscall.Exec` 把当前 PID 替换成 `/usr/local/bin/proxy-manager`（install.sh 固定 INSTALL_DIR），新 binary 立刻接管菜单。失败 fallback 到 `os.Exit(0)` + 提示用户手动重启。
+
+**通用教训**：长驻 daemon-style 工具自更新这一刻，"binary 在 disk 上换了"和"runtime 行为换了"是两件事。任何"升级 + 立刻在同 session 继续操作"的体验都需要 exec 自身。CLI 模式（`proxy-manager update` 一次性命令）天然没这问题，进程退出即结束。
+
 ### 菜单"更新 Proxy Manager"（11/12）双层 bug（v4.0.30 修）
 
 **症状**：v4.0.28 已合 PR #41 修 `proxy-manager update` 的 stdin EOF bug，但用户从 TUI 菜单触发更新仍报 `bash: line 1: 404:: command not found`。
